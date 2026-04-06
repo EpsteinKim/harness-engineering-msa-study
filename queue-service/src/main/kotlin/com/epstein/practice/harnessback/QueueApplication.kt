@@ -4,8 +4,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
 @SpringBootApplication
-class HarnessBackApplication
+class QueueApplication
 
 fun main(args: Array<String>) {
-    runApplication<HarnessBackApplication>(*args)
+    runApplication<QueueApplication>(*args)
 }

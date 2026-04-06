@@ -1,0 +1,13 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: gateway
+  cloud:
+    gateway:
+      routes:
+        - id: queue-service
+          uri: http://localhost:8080
+          predicates:
+            - Path=/api/v1/queues/**
