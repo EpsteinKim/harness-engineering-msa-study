@@ -13,7 +13,7 @@
 | 프로젝트명 | harness-back |
 | 아키텍처 | MSA (Microservice Architecture) |
 | 주요 기능 | 대기열(Queue) 시스템 |
-| 언어/프레임워크 | Kotlin 2.2.21 / Spring Boot 4.0.5 / WebFlux |
+| 언어/프레임워크 | Kotlin 2.2.21 / Spring Boot 4.0.5 / Spring MVC + Cloud Gateway |
 | 런타임 | Java 21 |
 | 컨테이너 | Docker (향후 K8s 전환 예정) |
 | 환경 | dev / staging / prod |

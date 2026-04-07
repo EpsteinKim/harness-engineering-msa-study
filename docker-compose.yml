@@ -1,0 +1,78 @@
+services:
+  gateway:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: gateway
+        SERVICE_PORT: 8080
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - queue-service
+      - user-service
+      - reserve-service
+    networks:
+      - harness-net
+
+  queue-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: queue-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATA_REDIS_HOST=redis
+    depends_on:
+      redis:
+        condition: service_healthy
+      reserve-service:
+        condition: service_started
+    networks:
+      - harness-net
+
+  reserve-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: reserve-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - NEONDB_URL=${NEONDB_URL}
+      - NEONDB_USERNAME=${NEONDB_USERNAME}
+      - NEONDB_PASSWORD=${NEONDB_PASSWORD}
+    networks:
+      - harness-net
+
+  user-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: user-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - NEONDB_URL=${NEONDB_URL}
+      - NEONDB_USERNAME=${NEONDB_USERNAME}
+      - NEONDB_PASSWORD=${NEONDB_PASSWORD}
+    networks:
+      - harness-net
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - harness-net
+
+volumes:
+  redis-data:
+
+networks:
+  harness-net:
+    driver: bridge

@@ -1,13 +1,50 @@
 server:
-  port: 8000
+  port: 8080
 
 spring:
   application:
     name: gateway
   cloud:
     gateway:
-      routes:
-        - id: queue-service
-          uri: http://localhost:8080
-          predicates:
-            - Path=/api/v1/queues/**
+      server:
+        webflux:
+          routes:
+            - id: queue-service
+              uri: http://localhost:8080
+              predicates:
+                - Path=/api/v1/queues/**
+
+            - id: user-service
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api/v1/users/**
+
+            - id: reserve-service
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/v1/reservations/**
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: queue-service
+              uri: http://queue-service:8080
+              predicates:
+                - Path=/api/v1/queues/**
+
+            - id: user-service
+              uri: http://user-service:8080
+              predicates:
+                - Path=/api/v1/users/**
+
+            - id: reserve-service
+              uri: http://reserve-service:8080
+              predicates:
+                - Path=/api/v1/reservations/**

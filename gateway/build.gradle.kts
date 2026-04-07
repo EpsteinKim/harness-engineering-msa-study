@@ -11,13 +11,12 @@ java {
     }
 }
 
-extra["springCloudVersion"] = "2025.0.0"
+extra["springCloudVersion"] = "2025.1.0"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webflux")
-    implementation("org.springframework.cloud:spring-cloud-gateway-server-webflux") {
-        exclude(group = "org.springframework.cloud", module = "spring-cloud-gateway-server")
-    }
+    implementation("org.springframework.cloud:spring-cloud-gateway-server-webflux")
+    implementation("org.springframework.cloud:spring-cloud-starter-loadbalancer")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
