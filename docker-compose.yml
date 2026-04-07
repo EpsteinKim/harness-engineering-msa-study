@@ -39,9 +39,9 @@ services:
         SERVICE_NAME: reserve-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - NEONDB_URL=${NEONDB_URL}
-      - NEONDB_USERNAME=${NEONDB_USERNAME}
-      - NEONDB_PASSWORD=${NEONDB_PASSWORD}
+      - NEONDB_URL=${RESERVE_DB_URL}
+      - NEONDB_USERNAME=${RESERVE_DB_USERNAME}
+      - NEONDB_PASSWORD=${RESERVE_DB_PASSWORD}
     networks:
       - harness-net
 
@@ -52,9 +52,9 @@ services:
         SERVICE_NAME: user-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - NEONDB_URL=${NEONDB_URL}
-      - NEONDB_USERNAME=${NEONDB_USERNAME}
-      - NEONDB_PASSWORD=${NEONDB_PASSWORD}
+      - NEONDB_URL=${USER_DB_URL}
+      - NEONDB_USERNAME=${USER_DB_USERNAME}
+      - NEONDB_PASSWORD=${USER_DB_PASSWORD}
     networks:
       - harness-net
 
