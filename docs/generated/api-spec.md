@@ -7,10 +7,24 @@
 
 ## 현재 API
 
-> 아직 자동 생성이 구성되지 않았습니다. springdoc-openapi 연동 후 활성화됩니다.
+> springdoc-openapi 연동 전까지 수동 기록.
 
-### 임시: 수동 기록
+### queue-service
 
 | Method | Path | 설명 | 상태 |
 |--------|------|------|------|
-| GET | `/` | Hello World (테스트용) | 구현 완료 |
+| POST | `/api/v1/queues/enqueue` | 대기열 등록 (callbackUrl + payload) | 구현 완료 |
+| DELETE | `/api/v1/queues/{userId}` | 대기열 취소 | 구현 완료 |
+| POST | `/api/v1/queues/dequeue` | 수동 dequeue (디버깅용) | 구현 완료 |
+
+### reserve-service
+
+| Method | Path | 설명 | 상태 |
+|--------|------|------|------|
+| POST | `/api/v1/reservations` | 좌석 예약 (낙관적 락) | 구현 완료 |
+
+### user-service
+
+| Method | Path | 설명 | 상태 |
+|--------|------|------|------|
+| GET | `/api/v1/users` | 헬스체크 | 구현 완료 |

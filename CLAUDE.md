@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MSA 실습용 대기열(Queue) 시스템 백엔드. Kotlin + Spring Boot WebFlux 기반 리액티브 서비스.
+MSA 실습용 대기열(Queue) 시스템 백엔드. Kotlin + Spring Boot MVC 기반 서비스.
 1인 실습 프로젝트로, 역할 분리는 프로세스 학습 목적. 상세 역할 정의는 AGENTS.md 참조.
+코드는 초보자도 알아보기 쉽도록 작성할 것
 
 ## Build & Run
 
@@ -15,22 +16,38 @@ MSA 실습용 대기열(Queue) 시스템 백엔드. Kotlin + Spring Boot WebFlux
 ./gradlew test         # 전체 테스트
 ./gradlew test --tests "*.ClassName.methodName"  # 단일 테스트
 ./gradlew clean build  # 클린 빌드
+
+# Docker Compose
+docker compose up -d --build          # 전체 실행
+docker compose up -d --build <서비스>  # 부분 실행
+docker compose logs -f <서비스>        # 로그 확인
 ```
 
 ## Tech Stack
 
 - **Kotlin 2.2.21** / **Java 21** / **Spring Boot 4.0.5**
-- **WebFlux** (리액티브, non-blocking) + **Kotlin Coroutines**
-- WebClient (서비스 간 HTTP 통신), Jackson Kotlin
-- JUnit 5 + kotlinx-coroutines-test
+- **Spring MVC** (queue-service, reserve-service, user-service)
+- **Spring Cloud Gateway** (WebFlux, gateway만)
+- **Redis** (대기열 상태 관리), **PostgreSQL/NeonDB** (영속 데이터)
+- RestClient (서비스 간 HTTP 통신), Jackson Kotlin 3.x
+- JUnit 5
 
 ## Architecture
 
-Phase 단계별 진행. 현재 Phase 1 (단일 Docker 컨테이너).
+Phase 단계별 진행. 현재 Phase 2 (Docker Compose MSA).
 
-- **Phase 1**: queue-service 단독 (현재)
-- **Phase 2**: API Gateway + Queue + User + Redis (Docker Compose)
+- **Phase 1**: queue-service 단독 ✅
+- **Phase 2**: Gateway + Queue + Reserve + User + Redis (Docker Compose) ← **현재**
 - **Phase 3**: Kubernetes 전환
+
+### 서비스 구성
+
+| 서비스 | 역할 | 기술 | 저장소 |
+|--------|------|------|--------|
+| gateway | API 라우팅 (단일 진입점) | Spring Cloud Gateway (WebFlux) | - |
+| queue-service | 범용 요청 대기열 + 스로틀링 | Spring MVC + Redis | Redis |
+| reserve-service | 좌석 예약 (낙관적 락) | Spring MVC + JPA | PostgreSQL (NeonDB) |
+| user-service | 사용자 관리 | Spring MVC + JPA | PostgreSQL (NeonDB) |
 
 상세 서비스 토폴로지와 인프라 구성은 ARCHITECTURE.md 참조.
 
@@ -59,7 +76,6 @@ Phase 단계별 진행. 현재 Phase 1 (단일 Docker 컨테이너).
 - **의존성(build.gradle.kts) 추가/변경 시 사용자 승인 필요.**
 - 서비스 간 직접 DB 접근 금지 (Database per Service 원칙).
 - Kotlin nullable 최소화, early return 패턴 사용.
-- Coroutine 사용 시 structured concurrency 준수.
 - Compiler flags: `-Xjsr305=strict` (null-safety 엄격 모드 적용됨).
 
 ## Documentation Structure

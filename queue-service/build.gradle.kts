@@ -12,18 +12,13 @@ java {
 }
 
 dependencies {
-    implementation("org.springframework.boot:spring-boot-starter-restclient")
-    implementation("org.springframework.boot:spring-boot-starter-webclient")
-    implementation("org.springframework.boot:spring-boot-starter-webflux")
-    implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
+    implementation(project(":common"))
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
     implementation("tools.jackson.module:jackson-module-kotlin")
-    testImplementation("org.springframework.boot:spring-boot-starter-restclient-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-webclient-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-webflux-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
