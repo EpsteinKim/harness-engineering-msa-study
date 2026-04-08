@@ -19,7 +19,7 @@
 - 형식: `{구역알파벳}{번호}` (예: A1, A2, ..., A100000, B1, ..., Z100000)
 - 구역은 좌석번호 앞 알파벳으로 판별
 
-### 3. DB 스키마 변경 (승인 대기)
+### 3. DB 스키마 변경 (승인됨 ✅)
 - `seats` 테이블에 `section VARCHAR(1) NOT NULL DEFAULT 'A'` 컬럼 추가
 - `idx_seats_event_section(event_id, section)` 인덱스 추가
 - 구역별 조회 시 `LIKE 'A%'` 대신 `section = 'A'`로 인덱스 활용
@@ -47,11 +47,20 @@ FOR UPDATE SKIP LOCKED;
 - [x] 자동 배정 예약 API 구현 (`POST /section`, SKIP LOCKED 패턴)
 - [x] 프론트 연동을 위한 응답 DTO 정리 + 문서 갱신
 - [x] QA 빌드 검증 통과
+- [x] QueryDSL 도입 (구역별 잔여석 조회 → `SeatQueryRepository`)
+- [x] DTO 통합 (`Requests.kt`, `Responses.kt`)
+- [x] `ServerException` + `GlobalExceptionHandler` 공통 모듈 추가
+- [x] springdoc-openapi 3.0.2 (Swagger UI) 추가
+- [x] Redis 포트 호스트 매핑 (로컬 개발용)
+- [x] `application-local.properties` 로컬 개발 프로필 추가
+- [x] DB에 section 컬럼 + 인덱스 적용 (MCP로 직접 실행)
+- [x] 시드 데이터 재삽입 (이벤트 2개 × 구역 A~D × 100석 = 800석)
 
 ## 남은 작업
 
 - [ ] Docker Compose 환경에서 E2E 테스트
 - [ ] 동시성 부하 테스트 (SKIP LOCKED 검증)
+- [ ] enqueue 통합 후 기존 seatId 기반 플로우 deprecation 검토
 
 ## 참고
 
