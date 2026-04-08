@@ -37,9 +37,9 @@
 | 서비스 | 상태 | 포트 (로컬/Docker) | 역할 | 기술 |
 |--------|------|-------------------|------|------|
 | gateway | **운영중** | 8080 / 8080 | 라우팅, 단일 진입점 | Spring Cloud Gateway (WebFlux) |
-| reserve-service | **운영중** | 8082 / 8080 | 좌석 예약 + 대기열/스로틀링 (낙관적 락) | Spring Boot MVC, JPA, Redis, Kotlin |
+| reserve-service | **운영중** | 8082 / 8080 | 좌석 예약 + 대기열/스로틀링 (낙관적 락 + SKIP LOCKED) | Spring Boot MVC, JPA, QueryDSL, Redis, Kotlin |
 | user-service | **개발중** | 8081 / 8080 | 사용자 CRUD | Spring Boot MVC, JPA, Kotlin |
-| redis | **운영중** | - / 6379 (내부) | reserve-service 대기열 상태 관리 | Redis 7 Alpine |
+| redis | **운영중** | 6379 / 6379 | reserve-service 대기열 상태 관리 | Redis 7 Alpine |
 
 ---
 
@@ -74,10 +74,11 @@
 ### 예약 요청 처리 흐름
 
 ```
-1. Client → POST /api/v1/reservations (userId, eventId, seatId)
-2. reserve-service → Redis waiting ZSET에 등록 + 메타데이터 Hash 저장
+1. Client → POST /api/v1/reservations/section (userId, eventId, section)
+2. reserve-service → Redis waiting ZSET에 등록 + 메타데이터 Hash 저장 (eventId, section)
 3. 스케줄러 (1초 간격) → waiting에서 N건 dequeue → processing으로 이동
-4. 스케줄러 → SeatReservationService.reserveSeat() 내부 호출
+4. 스케줄러 → section 기반: reserveSeatBySection() (FOR UPDATE SKIP LOCKED)
+                seatId 기반: reserveSeat() (낙관적 락, 하위 호환)
 5. 성공 시 complete (processing + Hash 삭제)
 6. 실패 시 fail (processing + Hash 삭제, 재등록 안 함)
 7. 10분 초과 시 → waiting 맨 뒤로 재등록
@@ -109,11 +110,13 @@
 
 ```sql
 events (id, name, event_time, created_at)
-seats  (id, event_id FK, seat_number, status, reserved_by, reserved_at, version)
+seats  (id, event_id FK, seat_number, section, status, reserved_by, reserved_at, version)
 ```
 
+- `seats.section`: 구역 (A~Z), VARCHAR(1)
 - `seats.version`: 낙관적 락 (@Version) — 동시 예약 충돌 방지
 - `seats.status`: AVAILABLE | RESERVED
+- 인덱스: `idx_seats_event_section(event_id, section)`, `idx_seats_event_status(event_id, status)`
 
 ### Redis 구조 (reserve-service)
 
@@ -121,7 +124,7 @@ seats  (id, event_id FK, seat_number, status, reserved_by, reserved_at, version)
 |-----|------|------|
 | `reservation:waiting` | Sorted Set (score=timestamp) | 대기 중 예약 요청 |
 | `reservation:processing` | Sorted Set (score=timestamp) | 처리 중 예약 요청 |
-| `reservation:request:{userId}` | Hash (eventId, seatId) | 예약 요청 메타데이터 |
+| `reservation:request:{userId}` | Hash (eventId, seatId/section) | 예약 요청 메타데이터 |
 
 ### DB 연결
 
@@ -153,16 +156,18 @@ seats  (id, event_id FK, seat_number, status, reserved_by, reserved_at, version)
 │                └──────────────────┘          │
 └──────────────────────────────────────────────┘
          │
-    ports: 8080:8080 (gateway만 외부 노출)
+    ports: 8080:8080 (gateway), 6379:6379 (redis)
 ```
 
 ### 환경 분리
 
 | 설정 | 로컬 | Docker |
 |------|------|--------|
-| Profile | default | `docker` |
-| DB 접속 | `.env` 환경변수 | docker-compose `.env` 전달 |
+| Profile | `local` | `docker` |
+| DB 접속 | `application-local.properties` (gitignore) | docker-compose `.env` 전달 |
+| Redis | localhost:6379 (Docker 포트 매핑) | 컨테이너명 `redis:6379` |
 | 서비스 주소 | localhost + 서비스별 포트 | 컨테이너명 (Docker DNS) |
+| API 문서 | `localhost:{port}/swagger-ui.html` | - |
 
 ---
 
@@ -180,7 +185,7 @@ harness-back/
 ├── .env.sample                  # 환경변수 템플릿
 ├── build.gradle.kts             # 루트 빌드 설정
 ├── settings.gradle.kts          # 모듈 등록
-├── common/                      # 공유 모듈 (ApiResponse 등)
+├── common/                      # 공유 모듈 (ApiResponse, ServerException, GlobalExceptionHandler)
 │   ├── build.gradle.kts
 │   └── src/
 ├── gateway/                     # API Gateway (Spring Cloud Gateway)
@@ -210,3 +215,4 @@ harness-back/
 | 2026-04-07 | v2.0.0 | Phase 2 실제 구현 반영: MVC+JPA 전환, Docker Compose, NeonDB, 라우팅 구성 | - |
 | 2026-04-07 | v3.0.0 | reserve-service 분리, queue-service 범용화 (callback 기반), 스로틀링 구현 | - |
 | 2026-04-08 | v4.0.0 | queue-service 제거, 대기열/스로틀링 로직을 reserve-service 내부로 흡수 | - |
+| 2026-04-08 | v5.0.0 | 좌석 시스템 리디자인: section 기반 자동 배정(SKIP LOCKED), QueryDSL 도입, 공통 예외 처리, springdoc, 로컬 개발 환경 정비 | - |
