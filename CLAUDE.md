@@ -45,8 +45,7 @@ Phase 단계별 진행. 현재 Phase 2 (Docker Compose MSA).
 | 서비스 | 역할 | 기술 | 저장소 |
 |--------|------|------|--------|
 | gateway | API 라우팅 (단일 진입점) | Spring Cloud Gateway (WebFlux) | - |
-| queue-service | 범용 요청 대기열 + 스로틀링 | Spring MVC + Redis | Redis |
-| reserve-service | 좌석 예약 (낙관적 락) | Spring MVC + JPA | PostgreSQL (NeonDB) |
+| reserve-service | 좌석 예약 (낙관적 락) + 대기열/스로틀링 | Spring MVC + JPA + Redis | PostgreSQL (NeonDB) + Redis |
 | user-service | 사용자 관리 | Spring MVC + JPA | PostgreSQL (NeonDB) |
 
 상세 서비스 토폴로지와 인프라 구성은 ARCHITECTURE.md 참조.
@@ -70,10 +69,16 @@ Phase 단계별 진행. 현재 Phase 2 (Docker Compose MSA).
 
 `main` ← `staging` ← `dev` ← `feature/{issue}-{name}`, `fix/`, `hotfix/`
 
+## Execution Plans
+
+실행 계획은 `docs/exec-plans/`에서 관리.
+- 진행 중인 계획: `docs/exec-plans/active/`에 마크다운 파일로 작성하고, `docs/exec-plans/active/index.md`에 기록할 것.
+- **완료된 계획은 반드시 `docs/exec-plans/completed/`로 이동하고, `docs/exec-plans/completed/index.md`에 기록할 것.**
+
 ## Critical Rules
 
 - **DB 스키마 변경은 반드시 사용자 승인 필요.** 마이그레이션, Entity, DDL 등 DB에 영향을 주는 변경은 먼저 변경안을 제시하고 승인받은 후 구현.
-- **의존성(build.gradle.kts) 추가/변경 시 사용자 승인 필요.**
+- **의존성(build.gradle.kts) 추가/변경 시 사용자 승인 필요.** 추가 전 반드시 현재 Spring Boot 버전(4.x)과의 호환성을 웹 검색으로 확인하고, 호환되는 버전을 특정한 후 제안할 것.
 - 서비스 간 직접 DB 접근 금지 (Database per Service 원칙).
 - Kotlin nullable 최소화, early return 패턴 사용.
 - Compiler flags: `-Xjsr305=strict` (null-safety 엄격 모드 적용됨).

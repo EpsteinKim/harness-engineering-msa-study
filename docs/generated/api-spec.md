@@ -9,19 +9,15 @@
 
 > springdoc-openapi 연동 전까지 수동 기록.
 
-### queue-service
-
-| Method | Path | 설명 | 상태 |
-|--------|------|------|------|
-| POST | `/api/v1/queues/enqueue` | 대기열 등록 (callbackUrl + payload) | 구현 완료 |
-| DELETE | `/api/v1/queues/{userId}` | 대기열 취소 | 구현 완료 |
-| POST | `/api/v1/queues/dequeue` | 수동 dequeue (디버깅용) | 구현 완료 |
-
 ### reserve-service
 
 | Method | Path | 설명 | 상태 |
 |--------|------|------|------|
-| POST | `/api/v1/reservations` | 좌석 예약 (낙관적 락) | 구현 완료 |
+| POST | `/api/v1/reservations` | 예약 요청 - 좌석 지정 (대기열 등록) | 구현 완료 |
+| POST | `/api/v1/reservations/section` | 예약 요청 - 구역 자동 배정 (대기열 등록) | 구현 완료 |
+| GET | `/api/v1/reservations/seats/{eventId}` | 전체 좌석 목록 조회 | 구현 완료 |
+| GET | `/api/v1/reservations/seats/{eventId}/sections` | 구역별 잔여석 조회 | 구현 완료 |
+| DELETE | `/api/v1/reservations/queue/{userId}` | 대기열 취소 | 구현 완료 |
 
 ### user-service
 
