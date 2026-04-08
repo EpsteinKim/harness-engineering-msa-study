@@ -35,6 +35,19 @@ class SeatReservationService(
             ReservationResult(userId, eventId, seatId, false, "Seat was taken by another user")
         }
     }
+
+    @Transactional
+    fun reserveSeatBySection(eventId: Long, section: String, userId: String): ReservationResult {
+        val seat = seatRepository.findFirstAvailableSeatForUpdate(eventId, section)
+            ?: return ReservationResult(userId, eventId, 0, false, "No available seat in section $section")
+
+        seat.status = SeatStatus.RESERVED
+        seat.reservedBy = userId
+        seat.reservedAt = LocalDateTime.now()
+        seatRepository.save(seat)
+
+        return ReservationResult(userId, eventId, seat.id, true, "Seat ${seat.seatNumber} reserved successfully")
+    }
 }
 
 data class ReservationResult(

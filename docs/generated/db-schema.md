@@ -28,7 +28,8 @@ CREATE TABLE seats (
     id          BIGSERIAL    PRIMARY KEY,
     event_id    BIGINT       NOT NULL REFERENCES events(id),
     seat_number VARCHAR(20)  NOT NULL,
-    status      VARCHAR(20)  NOT NULL DEFAULT 'AVAILABLE',  -- AVAILABLE | RESERVED
+    section     VARCHAR(1)   NOT NULL DEFAULT 'A',           -- 구역 (A~Z)
+    status      VARCHAR(20)  NOT NULL DEFAULT 'AVAILABLE',   -- AVAILABLE | RESERVED
     reserved_by VARCHAR(255),
     reserved_at TIMESTAMP,
     version     BIGINT       NOT NULL DEFAULT 0,             -- 낙관적 락
@@ -36,15 +37,16 @@ CREATE TABLE seats (
 );
 
 CREATE INDEX idx_seats_event_status ON seats(event_id, status);
+CREATE INDEX idx_seats_event_section ON seats(event_id, section);
 ```
 
 ### user-service (NeonDB / PostgreSQL)
 
 > 아직 스키마가 정의되지 않았습니다.
 
-### queue-service
+### reserve-service (Redis)
 
-> DB 사용 안 함. Redis만 사용. (ARCHITECTURE.md Redis 구조 참조)
+> 예약 대기열은 Redis로 관리. 상세 키 구조는 ARCHITECTURE.md Redis 구조 참조.
 
 ---
 
@@ -53,3 +55,4 @@ CREATE INDEX idx_seats_event_status ON seats(event_id, status);
 | 날짜 | 변경 내용 | 승인 |
 |------|-----------|------|
 | 2026-04-07 | events, seats 테이블 추가 (reserve-service) | 승인됨 |
+| 2026-04-08 | seats 테이블에 section 컬럼 + idx_seats_event_section 인덱스 추가 | 승인됨 |

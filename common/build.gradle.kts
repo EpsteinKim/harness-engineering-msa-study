@@ -9,7 +9,10 @@ java {
 }
 
 dependencies {
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:4.0.5"))
     implementation("tools.jackson.module:jackson-module-kotlin:3.0.4")
+    implementation("org.springframework:spring-web")
+    implementation("org.slf4j:slf4j-api")
 }
 
 kotlin {
