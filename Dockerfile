@@ -10,7 +10,6 @@ COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle ./gradle
 # 서브모듈 빌드 파일 복사
 COPY common/build.gradle.kts ./common/
-COPY queue-service/build.gradle.kts ./queue-service/
 COPY gateway/build.gradle.kts ./gateway/
 COPY user-service/build.gradle.kts ./user-service/
 COPY reserve-service/build.gradle.kts ./reserve-service/

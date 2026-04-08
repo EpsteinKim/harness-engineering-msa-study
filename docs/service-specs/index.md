@@ -6,6 +6,6 @@
 
 | 서비스 | 상태 | 명세 문서 | 설명 |
 |--------|------|-----------|------|
-| queue-service | 개발중 | [queue-service.md](./queue-service.md) | 대기열 핵심 서비스 |
-| api-gateway | 계획 | 미작성 | Spring Cloud Gateway 기반 라우팅 |
-| user-service | 계획 | 미작성 | 사용자 관리/인증 |
+| reserve-service | 운영중 | 미작성 | 좌석 예약 + 대기열/스로틀링 |
+| api-gateway | 운영중 | 미작성 | Spring Cloud Gateway 기반 라우팅 |
+| user-service | 개발중 | 미작성 | 사용자 관리/인증 |

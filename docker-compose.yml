@@ -10,25 +10,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
-      - queue-service
       - user-service
       - reserve-service
-    networks:
-      - harness-net
-
-  queue-service:
-    build:
-      context: .
-      args:
-        SERVICE_NAME: queue-service
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_DATA_REDIS_HOST=redis
-    depends_on:
-      redis:
-        condition: service_healthy
-      reserve-service:
-        condition: service_started
     networks:
       - harness-net
 
@@ -39,9 +22,13 @@ services:
         SERVICE_NAME: reserve-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATA_REDIS_HOST=redis
       - NEONDB_URL=${RESERVE_DB_URL}
       - NEONDB_USERNAME=${RESERVE_DB_USERNAME}
       - NEONDB_PASSWORD=${RESERVE_DB_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - harness-net
 
@@ -60,6 +47,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
