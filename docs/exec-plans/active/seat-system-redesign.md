@@ -55,12 +55,33 @@ FOR UPDATE SKIP LOCKED;
 - [x] `application-local.properties` 로컬 개발 프로필 추가
 - [x] DB에 section 컬럼 + 인덱스 적용 (MCP로 직접 실행)
 - [x] 시드 데이터 재삽입 (이벤트 2개 × 구역 A~D × 100석 = 800석)
+- [x] 클래스 리네임 완성 (ReservationQueueService → ReservationService, SeatReservationService → SeatService)
+- [x] 이벤트별 큐 분리 (WAITING_KEY(eventId)) — 모든 메서드에 eventId 적용
+- [x] 중복 키 함수 통합 (constant.kt의 metadataKey, eventCacheKey 사용)
+- [x] cancel/getPosition에서 메타데이터 기반 eventId 조회
+- [x] 동적 스케줄링 (DynamicScheduler) — 이벤트별 독립 타이머
+- [x] SchedulerConfig (ThreadPoolTaskScheduler, poolSize=20)
+- [x] remainingSeats Redis 캐시 실시간 관리 (HINCRBY)
+- [x] 5분 보정 스케줄 (syncRemainingSeats)
+- [x] enqueue 시 잔여석 체크 (조기 거부)
+- [x] processEvent 시 잔여석 체크 (DB 호출 차단)
+- [x] 구역별 잔여석 Redis 캐싱 (section:$section:available/total)
+- [x] getSectionAvailability를 Redis 조회로 전환 (DB 호출 제거)
+- [x] seatSelectionType 추가 (SECTION_SELECT, SEAT_PICK)
+- [x] SEAT_PICK 좌석별 캐싱 (event:$eventId:seats)
+- [x] enqueue 타입별 검증 (SEAT_PICK은 seatId 필수, SECTION_SELECT은 section 필수)
+- [x] 동시성 이슈 수정: cancel-processEvent 경합 (ZSCORE 재확인)
+- [x] 동시성 이슈 수정: 동일 유저 중복 enqueue 거부
+- [x] 동시성 이슈 수정: sync 시 큐 처리 일시 중지
+- [x] Controller "both null" 가드 (INVALID_REQUEST)
+- [x] JPQL enum FQN 수정
+- [x] 전체 테스트 코드 업데이트 (28개 테스트 스위트)
 
 ## 남은 작업
 
+- [ ] Controller 에러 처리 통일 (ServerException + GlobalExceptionHandler 활용)
 - [ ] Docker Compose 환경에서 E2E 테스트
-- [ ] 동시성 부하 테스트 (SKIP LOCKED 검증)
-- [ ] enqueue 통합 후 기존 seatId 기반 플로우 deprecation 검토
+- [ ] 동시성 부하 테스트 (SKIP LOCKED + 동적 스케줄링 검증)
 
 ## 참고
 
