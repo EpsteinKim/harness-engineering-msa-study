@@ -9,13 +9,13 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 
 @Service
-class SeatReservationService(
+class SeatService(
     private val seatRepository: SeatRepository
 ) {
-    private val logger = LoggerFactory.getLogger(SeatReservationService::class.java)
+    private val logger = LoggerFactory.getLogger(SeatService::class.java)
 
     @Transactional
-    fun reserveSeat(eventId: Long, seatId: Long, userId: String): ReservationResult {
+    fun reserveBySeatId(eventId: Long, seatId: Long, userId: String): ReservationResult {
         val seat = seatRepository.findByEventIdAndId(eventId, seatId)
             ?: return ReservationResult(userId, eventId, seatId, false, "Seat not found")
 
@@ -29,7 +29,7 @@ class SeatReservationService(
 
         return try {
             seatRepository.save(seat)
-            ReservationResult(userId, eventId, seatId, true, "Reservation successful")
+            ReservationResult(userId, eventId, seatId, true, "Reservation successful", seat.section)
         } catch (e: ObjectOptimisticLockingFailureException) {
             logger.warn("Optimistic lock conflict for seat {} in event {} by user {}", seatId, eventId, userId)
             ReservationResult(userId, eventId, seatId, false, "Seat was taken by another user")
@@ -37,7 +37,7 @@ class SeatReservationService(
     }
 
     @Transactional
-    fun reserveSeatBySection(eventId: Long, section: String, userId: String): ReservationResult {
+    fun reserveBySection(eventId: Long, section: String, userId: String): ReservationResult {
         val seat = seatRepository.findFirstAvailableSeatForUpdate(eventId, section)
             ?: return ReservationResult(userId, eventId, 0, false, "No available seat in section $section")
 
@@ -46,7 +46,7 @@ class SeatReservationService(
         seat.reservedAt = LocalDateTime.now()
         seatRepository.save(seat)
 
-        return ReservationResult(userId, eventId, seat.id, true, "Seat ${seat.seatNumber} reserved successfully")
+        return ReservationResult(userId, eventId, seat.id, true, "Seat ${seat.seatNumber} reserved successfully", section)
     }
 }
 
@@ -55,5 +55,6 @@ data class ReservationResult(
     val eventId: Long,
     val seatId: Long,
     val success: Boolean,
-    val message: String
+    val message: String,
+    val section: String? = null
 )

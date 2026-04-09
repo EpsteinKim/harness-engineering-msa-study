@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 
+
 interface SeatRepository : JpaRepository<Seat, Long> {
     fun findByEventIdAndId(eventId: Long, id: Long): Seat?
     fun findByEventId(eventId: Long): List<Seat>
@@ -26,4 +27,7 @@ interface SeatRepository : JpaRepository<Seat, Long> {
         @Param("eventId") eventId: Long,
         @Param("section") section: String
     ): Seat?
+
+    @Query("SELECT COUNT(s) FROM Seat s WHERE s.event.id = :eventId AND s.status = com.epstein.practice.reserveservice.entity.SeatStatus.AVAILABLE")
+    fun countAvailableSeats(@Param("eventId") eventId: Long): Long
 }

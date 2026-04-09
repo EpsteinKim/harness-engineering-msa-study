@@ -64,6 +64,7 @@ Phase 단계별 진행. 현재 Phase 2 (Docker Compose MSA).
 {type}({scope}): {description}
 # type: feat, fix, hotfix, refactor, test, chore, docs
 ```
+- **Co-Authored-By 트레일러를 넣지 않는다.**
 
 ### 브랜치
 
@@ -75,7 +76,13 @@ Phase 단계별 진행. 현재 Phase 2 (Docker Compose MSA).
 - 진행 중인 계획: `docs/exec-plans/active/`에 마크다운 파일로 작성하고, `docs/exec-plans/active/index.md`에 기록할 것.
 - **완료된 계획은 반드시 `docs/exec-plans/completed/`로 이동하고, `docs/exec-plans/completed/index.md`에 기록할 것.**
 
+## Testing
+
+테스트 작성 지침은 `docs/TEST_GUIDE.md` 참조.
+
 ## Critical Rules
+
+- **모든 요청에서 의도를 먼저 파악할 것.** 코드 변경, 버그 리포트, 리팩토링 등 어떤 작업이든 "왜 이렇게 작성했는가"를 먼저 이해할 것. 의도를 파악한 뒤 더 나은 방향이 있다면 적극적으로 제안할 것.
 
 - **DB 스키마 변경은 반드시 사용자 승인 필요.** 마이그레이션, Entity, DDL 등 DB에 영향을 주는 변경은 먼저 변경안을 제시하고 승인받은 후 구현.
 - **의존성(build.gradle.kts) 추가/변경 시 사용자 승인 필요.** 추가 전 반드시 현재 Spring Boot 버전(4.x)과의 호환성을 웹 검색으로 확인하고, 호환되는 버전을 특정한 후 제안할 것.
