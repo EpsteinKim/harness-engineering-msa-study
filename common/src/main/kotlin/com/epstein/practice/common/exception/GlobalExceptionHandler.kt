@@ -15,7 +15,7 @@ class GlobalExceptionHandler {
     @ExceptionHandler(ServerException::class)
     fun handleServerException(e: ServerException): ResponseEntity<ApiResponse<Any>> {
         return ResponseEntity.badRequest().body(
-            ApiResponse(status = "error", data = e.data, message = e.message)
+            ApiResponse(status = "error", data = e.data, message = e.message, code = e.code)
         )
     }
 

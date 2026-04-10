@@ -6,9 +6,3 @@ data class ReservationRequest(
     val seatId: Long? = null,
     val section: String? = null
 )
-
-data class SectionReservationRequest(
-    val userId: String,
-    val eventId: Long,
-    val section: String
-)

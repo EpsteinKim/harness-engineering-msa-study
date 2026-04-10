@@ -1,112 +1,86 @@
 package com.epstein.practice.reserveservice.service
 
-import com.epstein.practice.reserveservice.constant.waitingKey
-import com.epstein.practice.reserveservice.constant.eventCacheKey
-import com.epstein.practice.reserveservice.constant.metadataKey
-import com.epstein.practice.reserveservice.constant.sectionAvailableField
-import com.epstein.practice.reserveservice.constant.seatCacheKey
-import com.epstein.practice.reserveservice.constant.sectionTotalField
-import com.epstein.practice.reserveservice.dto.SectionAvailabilityResponse
-import com.epstein.practice.reserveservice.repository.SeatRepository
-import org.springframework.data.redis.core.StringRedisTemplate
+import com.epstein.practice.common.exception.ServerException
+import com.epstein.practice.reserveservice.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.cache.QueueCacheRepository
+import com.epstein.practice.reserveservice.constant.ErrorCode
 import org.springframework.stereotype.Service
 
 @Service
 class ReservationService(
-    private val redis: StringRedisTemplate,
-    private val seatRepository: SeatRepository
+    private val eventCache: EventCacheRepository,
+    private val queueCache: QueueCacheRepository,
+    private val seatService: SeatService
 ) {
     fun enqueue(userId: String, eventId: Long, seatId: Long? = null, section: String? = null) {
-        if (redis.hasKey(eventCacheKey(eventId)) != true) {
-            throw IllegalStateException("Event is not open for reservations")
+        if (!eventCache.exists(eventId)) {
+            throw ServerException(message = "Event is not open for reservations", code = ErrorCode.EVENT_NOT_OPEN)
         }
 
-        val hashOps = redis.opsForHash<String, String>()
-        val remaining = hashOps.get(eventCacheKey(eventId), "remainingSeats")?.toLongOrNull() ?: 0
+        val remaining = eventCache.getRemainingSeats(eventId)
         if (remaining <= 0) {
-            throw IllegalStateException("No remaining seats")
+            throw ServerException(message = "No remaining seats", code = ErrorCode.NO_REMAINING_SEATS)
         }
 
-        val selectionType = hashOps.get(eventCacheKey(eventId), "seatSelectionType") ?: "SECTION_SELECT"
+        val selectionType = eventCache.getSeatSelectionType(eventId)
         if (selectionType == "SEAT_PICK" && seatId == null) {
-            throw IllegalArgumentException("SEAT_PICK events require a specific seatId")
+            throw ServerException(message = "SEAT_PICK events require a specific seatId", code = ErrorCode.INVALID_REQUEST)
         }
         if (selectionType == "SECTION_SELECT" && section == null) {
-            throw IllegalArgumentException("SECTION_SELECT events require a section")
+            throw ServerException(message = "SECTION_SELECT events require a section", code = ErrorCode.INVALID_REQUEST)
         }
 
         if (selectionType == "SEAT_PICK" && seatId != null) {
-            val seatData = hashOps.get(seatCacheKey(eventId), seatId.toString())
-            if (seatData == null) {
-                throw IllegalStateException("Seat not found")
-            }
+            val seatData = eventCache.getSeatStatus(eventId, seatId)
+                ?: throw ServerException(message = "Seat not found", code = ErrorCode.SEAT_NOT_FOUND)
             if (seatData.endsWith(":RESERVED")) {
-                throw IllegalStateException("Seat is already reserved")
+                throw ServerException(message = "Seat is already reserved", code = ErrorCode.SEAT_ALREADY_RESERVED)
             }
         }
 
-        val alreadyInQueue = redis.opsForZSet().score(waitingKey(eventId), userId) != null
-        if (alreadyInQueue) {
-            throw IllegalStateException("Already in queue")
+        if (queueCache.isInQueue(eventId, userId)) {
+            throw ServerException(message = "Already in queue", code = ErrorCode.ALREADY_IN_QUEUE)
         }
 
         val score = System.currentTimeMillis().toDouble()
-        redis.opsForZSet().add(waitingKey(eventId), userId, score)
-        val metadata = mutableMapOf("eventId" to eventId.toString())
+        queueCache.addToQueue(eventId, userId, score)
+        val metadata = mutableMapOf<String, String>()
         seatId?.let { metadata["seatId"] = it.toString() }
         section?.let { metadata["section"] = it }
-        redis.opsForHash<String, String>().putAll(metadataKey(userId), metadata)
+        queueCache.saveMetadata(eventId, userId, metadata)
     }
 
     fun peekWaiting(eventId: Long, count: Long): Set<String> {
-        return redis.opsForZSet().range(waitingKey(eventId), 0, count - 1) ?: emptySet()
+        return queueCache.peekQueue(eventId, count)
     }
 
     fun removeFromWaiting(eventId: Long, userId: String) {
-        redis.opsForZSet().remove(waitingKey(eventId), userId)
-        redis.delete(metadataKey(userId))
+        queueCache.removeFromQueue(eventId, userId)
+        queueCache.deleteMetadata(eventId, userId)
     }
 
-    fun getSectionAvailability(eventId: Long): List<SectionAvailabilityResponse> {
-        val allFields = redis.opsForHash<String, String>().entries(eventCacheKey(eventId))
-        if (allFields.isEmpty()) return emptyList()
-
-        val sections = allFields.keys
-            .filter { it.startsWith("section:") && it.endsWith(":available") }
-            .map { it.removePrefix("section:").removeSuffix(":available") }
-
-        return sections.map { section ->
-            SectionAvailabilityResponse(
-                section = section,
-                availableCount = allFields[sectionAvailableField(section)]?.toLongOrNull() ?: 0,
-                totalCount = allFields[sectionTotalField(section)]?.toLongOrNull() ?: 0
-            )
-        }.sortedBy { it.section }
-    }
-
-    fun getRequestData(userId: String): RequestData? {
-        val data = redis.opsForHash<String, String>().entries(metadataKey(userId))
+    fun getRequestData(eventId: Long, userId: String): RequestData? {
+        val data = queueCache.getMetadata(eventId, userId)
         if (data.isEmpty()) return null
-        val eventId = data["eventId"]?.toLongOrNull() ?: return null
         val seatId = data["seatId"]?.toLongOrNull()
         val section = data["section"]
         return RequestData(eventId, seatId, section)
     }
 
-    fun cancel(userId: String): Boolean {
-        val data = getRequestData(userId) ?: return false
-        val removed = redis.opsForZSet().remove(waitingKey(data.eventId), userId) ?: 0
-        redis.delete(metadataKey(userId))
-        if (removed > 0) {
-            redis.opsForHash<String, String>()
-                .increment(eventCacheKey(data.eventId), "remainingSeats", 1)
+    fun cancel(eventId: Long, userId: String): Boolean {
+        val removed = queueCache.removeFromQueue(eventId, userId)
+        queueCache.deleteMetadata(eventId, userId)
+
+        val releaseResult = seatService.releaseSeat(eventId, userId.toLong())
+        if (releaseResult.success) {
+            eventCache.adjustSeatCounts(eventId, 1, releaseResult.section)
         }
-        return removed > 0
+
+        return removed > 0 || releaseResult.success
     }
 
-    fun getPosition(userId: String): Long? {
-        val data = getRequestData(userId) ?: return null
-        return redis.opsForZSet().rank(waitingKey(data.eventId), userId)
+    fun getPosition(eventId: Long, userId: String): Long? {
+        return queueCache.getQueuePosition(eventId, userId)
     }
 }
 
