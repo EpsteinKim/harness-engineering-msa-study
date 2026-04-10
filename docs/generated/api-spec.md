@@ -13,11 +13,9 @@
 
 | Method | Path | 설명 | 상태 |
 |--------|------|------|------|
-| POST | `/api/v1/reservations` | 예약 요청 - 좌석 지정 (대기열 등록) | 구현 완료 |
-| POST | `/api/v1/reservations/section` | 예약 요청 - 구역 자동 배정 (대기열 등록) | 구현 완료 |
-| GET | `/api/v1/reservations/seats/{eventId}` | 전체 좌석 목록 조회 | 구현 완료 |
+| POST | `/api/v1/reservations` | 예약 요청 (seatId 또는 section) | 구현 완료 |
 | GET | `/api/v1/reservations/seats/{eventId}/sections` | 구역별 잔여석 조회 | 구현 완료 |
-| DELETE | `/api/v1/reservations/queue/{userId}` | 대기열 취소 | 구현 완료 |
+| DELETE | `/api/v1/reservations/queue/{eventId}/{userId}` | 대기열 취소 | 구현 완료 |
 
 ### user-service
 

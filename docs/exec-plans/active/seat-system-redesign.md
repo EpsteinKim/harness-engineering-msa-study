@@ -77,11 +77,26 @@ FOR UPDATE SKIP LOCKED;
 - [x] JPQL enum FQN 수정
 - [x] 전체 테스트 코드 업데이트 (28개 테스트 스위트)
 
+- [x] Controller 에러 처리 통일: ApiResponse.error → ServerException 전환, ErrorCode 상수화
+- [x] 에러코드 분리 (EVENT_NOT_OPEN, NO_REMAINING_SEATS, ALREADY_IN_QUEUE 등 8종)
+- [x] enqueue 엔드포인트 통합 (POST /reservations/section 제거, POST /reservations 하나로)
+- [x] SectionReservationRequest DTO 제거
+- [x] metadata 키에 eventId 포함 (reservation:metadata:{eventId}:{userId})
+- [x] cancel API에 eventId 추가 (DELETE /queue/{eventId}/{userId})
+- [x] getPosition/getRequestData/cancel 시그니처에 eventId 파라미터 추가
+- [x] metadata에서 eventId 필드 제거 (키에 이미 포함)
+- [x] ReservationService에서 미사용 seatRepository 의존성 제거
+- [x] SeatController 경로 변경 (/api/v1/seats → /api/v1/reservations/seats)
+- [x] 스로틀 레이트 증가 (10 → 20)
+- [x] ServerException에 code 필드 추가, GlobalExceptionHandler에 code 포함
+- [x] DynamicScheduler 안정성: userId.toLongOrNull() + 전체 try-catch
+- [x] SeatService.reserveBySection에 ObjectOptimisticLockingFailureException 처리 추가
+- [x] Locust 부하테스트 코드 수정: userId 매 요청 새로 생성, 이벤트 분리 (1=SEAT_PICK, 2=SECTION_SELECT), 400 에러 필터링, 최대 요청 수 제한
+- [x] 동시성 부하 테스트 실행 및 결과 분석 (930 RPS 달성)
+
 ## 남은 작업
 
-- [ ] Controller 에러 처리 통일 (ServerException + GlobalExceptionHandler 활용)
 - [ ] Docker Compose 환경에서 E2E 테스트
-- [ ] 동시성 부하 테스트 (SKIP LOCKED + 동적 스케줄링 검증)
 
 ## 참고
 

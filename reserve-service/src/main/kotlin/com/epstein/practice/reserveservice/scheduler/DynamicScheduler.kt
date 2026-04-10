@@ -1,14 +1,11 @@
 package com.epstein.practice.reserveservice.scheduler
 
-import com.epstein.practice.reserveservice.constant.eventCacheKey
-import com.epstein.practice.reserveservice.constant.seatCacheKey
-import com.epstein.practice.reserveservice.constant.sectionAvailableField
-import com.epstein.practice.reserveservice.constant.waitingKey
+import com.epstein.practice.reserveservice.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.cache.QueueCacheRepository
 import com.epstein.practice.reserveservice.service.ReservationService
 import com.epstein.practice.reserveservice.service.SeatService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import java.time.Duration
@@ -20,7 +17,8 @@ class DynamicScheduler(
     private val taskScheduler: TaskScheduler,
     private val reserveService: ReservationService,
     private val seatService: SeatService,
-    private val redis: StringRedisTemplate,
+    private val eventCache: EventCacheRepository,
+    private val queueCache: QueueCacheRepository,
     @Value("\${queue.throttle.rate:10}") private val throttleRate: Long
 ) {
     private val logger = LoggerFactory.getLogger(DynamicScheduler::class.java)
@@ -50,58 +48,57 @@ class DynamicScheduler(
         logger.info("Processing {} reservation requests for event {}", users.size, eventId)
 
         for (userId in users) {
-            val remaining = redis.opsForHash<String, String>()
-                .get(eventCacheKey(eventId), "remainingSeats")?.toLongOrNull() ?: 0
+            val remaining = eventCache.getRemainingSeats(eventId)
             if (remaining <= 0) {
                 logger.info("No remaining seats for event {}, stopping processing", eventId)
                 break
             }
 
-            val stillInQueue = redis.opsForZSet().score(waitingKey(eventId), userId) != null
-            if (!stillInQueue) {
+            if (!queueCache.isInQueue(eventId, userId)) {
                 logger.info("User {} already removed from queue, skipping", userId)
                 continue
             }
 
-            val data = reserveService.getRequestData(userId)
+            val data = reserveService.getRequestData(eventId, userId)
             if (data == null) {
                 logger.warn("No metadata for user {}", userId)
                 reserveService.removeFromWaiting(eventId, userId)
                 continue
             }
 
-            val result = if (data.section != null) {
-                seatService.reserveBySection(data.eventId, data.section, userId)
-            } else if (data.seatId != null) {
-                seatService.reserveBySeatId(data.eventId, data.seatId, userId)
-            } else {
-                logger.warn("Invalid request data for user {}", userId)
+            val userIdLong = userId.toLongOrNull()
+            if (userIdLong == null) {
+                logger.warn("Invalid userId format: {}", userId)
                 reserveService.removeFromWaiting(eventId, userId)
                 continue
             }
 
-            reserveService.removeFromWaiting(eventId, userId)
-            if (result.success) {
-                val hashOps = redis.opsForHash<String, String>()
-                hashOps.increment(eventCacheKey(eventId), "remainingSeats", -1)
-                result.section?.let { section ->
-                    hashOps.increment(eventCacheKey(eventId), sectionAvailableField(section), -1)
+            try {
+                val result = if (data.section != null) {
+                    seatService.reserveBySection(data.eventId, data.section, userIdLong)
+                } else if (data.seatId != null) {
+                    seatService.reserveBySeatId(data.eventId, data.seatId, userIdLong)
+                } else {
+                    logger.warn("Invalid request data for user {}", userId)
+                    reserveService.removeFromWaiting(eventId, userId)
+                    continue
                 }
 
-                val selectionType = hashOps.get(eventCacheKey(eventId), "seatSelectionType")
-                if (selectionType == "SEAT_PICK") {
-                    val currentValue = hashOps.get(seatCacheKey(eventId), result.seatId.toString())
-                    if (currentValue != null) {
-                        val parts = currentValue.split(":")
-                        if (parts.size >= 3) {
-                            hashOps.put(seatCacheKey(eventId), result.seatId.toString(), "${parts[0]}:${parts[1]}:RESERVED")
-                        }
+                reserveService.removeFromWaiting(eventId, userId)
+                if (result.success) {
+                    eventCache.adjustSeatCounts(eventId, -1, result.section)
+
+                    if (eventCache.getSeatSelectionType(eventId) == "SEAT_PICK") {
+                        eventCache.markSeatReserved(eventId, result.seatId)
                     }
-                }
 
-                logger.info("Reservation succeeded: user={}, event={}, seat={}", userId, data.eventId, result.seatId)
-            } else {
-                logger.info("Reservation failed: user={}, reason={}", userId, result.message)
+                    logger.info("Reservation succeeded: user={}, event={}, seat={}", userId, data.eventId, result.seatId)
+                } else {
+                    logger.info("Reservation failed: user={}, reason={}", userId, result.message)
+                }
+            } catch (e: Exception) {
+                logger.error("Unexpected error processing user {} for event {}: {}", userId, eventId, e.message)
+                reserveService.removeFromWaiting(eventId, userId)
             }
         }
     }

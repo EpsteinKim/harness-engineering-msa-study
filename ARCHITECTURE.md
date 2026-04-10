@@ -74,8 +74,7 @@
 ### 예약 요청 처리 흐름
 
 ```
-1. Client → POST /api/v1/reservations (userId, eventId, seatId) [SEAT_PICK]
-   또는 POST /api/v1/reservations/section (userId, eventId, section) [SECTION_SELECT]
+1. Client → POST /api/v1/reservations (userId, eventId, seatId 또는 section)
 2. reserve-service → Redis 캐시 검증 (이벤트 열림, 잔여석, 타입별 검증)
 3. reserve-service → Redis waiting ZSET에 등록 + 메타데이터 Hash 저장
 4. DynamicScheduler (이벤트별 독립 스레드, 1초 간격) → waiting에서 N건 peek
@@ -84,6 +83,7 @@
    - SEAT_PICK: reserveBySeatId() (낙관적 락)
 6. 성공 시 → 큐에서 제거, Redis 캐시 갱신 (remainingSeats, 구역별 available, 좌석 상태)
 7. 실패 시 → 큐에서 제거, 로그 기록
+8. 예외 발생 시 → try-catch로 스케줄러 보호, 해당 유저만 스킵
 ```
 
 ### 비동기 (계획)
@@ -127,7 +127,7 @@ seats  (id, event_id FK, seat_number, section, status, reserved_by, reserved_at,
 | `event:{eventId}` | Hash | 이벤트 캐시 (name, remainingSeats, seatSelectionType, 구역별 available/total, TTL=ticketCloseTime) |
 | `event:{eventId}:seats` | Hash | 좌석별 상태 캐시 (SEAT_PICK만, field=seatId, value="seatNumber:section:status") |
 | `reservation:waiting:{eventId}` | Sorted Set (score=timestamp) | 이벤트별 대기열 |
-| `reservation:metadata:{userId}` | Hash (eventId, seatId/section) | 예약 요청 메타데이터 |
+| `reservation:metadata:{eventId}:{userId}` | Hash (seatId/section) | 예약 요청 메타데이터 (이벤트별 독립) |
 
 ### DB 연결
 
@@ -220,3 +220,4 @@ harness-back/
 | 2026-04-08 | v4.0.0 | queue-service 제거, 대기열/스로틀링 로직을 reserve-service 내부로 흡수 | - |
 | 2026-04-08 | v5.0.0 | 좌석 시스템 리디자인: section 기반 자동 배정(SKIP LOCKED), QueryDSL 도입, 공통 예외 처리, springdoc, 로컬 개발 환경 정비 | - |
 | 2026-04-09 | v6.0.0 | reserve-service 리팩토링: 이벤트별 동적 스케줄링, Redis 캐시 전략(remainingSeats/구역별/좌석별), seatSelectionType 추가, 동시성 이슈 수정 | - |
+| 2026-04-10 | v7.0.0 | 에러 처리 통일(ServerException+ErrorCode), API 통합(enqueue 1개, cancel에 eventId), metadata 키 이벤트별 분리, 스케줄러 안정성 강화, 부하테스트 구축 | - |

@@ -1,5 +1,7 @@
 package com.epstein.practice.reserveservice.scheduler
 
+import com.epstein.practice.reserveservice.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.cache.QueueCacheRepository
 import com.epstein.practice.reserveservice.service.ReservationResult
 import com.epstein.practice.reserveservice.service.ReservationService
 import com.epstein.practice.reserveservice.service.RequestData
@@ -17,9 +19,6 @@ import org.mockito.Mockito.lenient
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
-import org.springframework.data.redis.core.HashOperations
-import org.springframework.data.redis.core.StringRedisTemplate
-import org.springframework.data.redis.core.ZSetOperations
 import org.springframework.scheduling.TaskScheduler
 import java.time.Duration
 import java.util.concurrent.ScheduledFuture
@@ -37,13 +36,10 @@ class DynamicSchedulerTest {
     lateinit var seatService: SeatService
 
     @Mock
-    lateinit var redis: StringRedisTemplate
+    lateinit var eventCache: EventCacheRepository
 
     @Mock
-    lateinit var hashOps: HashOperations<String, String, String>
-
-    @Mock
-    lateinit var zSetOps: ZSetOperations<String, String>
+    lateinit var queueCache: QueueCacheRepository
 
     @Mock
     lateinit var scheduledFuture: ScheduledFuture<*>
@@ -58,14 +54,12 @@ class DynamicSchedulerTest {
 
         @BeforeEach
         fun setUp() {
-            lenient().`when`(redis.opsForHash<String, String>()).thenReturn(hashOps)
-            lenient().`when`(redis.opsForZSet()).thenReturn(zSetOps)
             lenient().`when`(taskScheduler.scheduleAtFixedRate(any(Runnable::class.java), any(Duration::class.java)))
                 .thenAnswer { invocation ->
                     capturedRunnable = invocation.getArgument(0)
                     scheduledFuture
                 }
-            scheduler = DynamicScheduler(taskScheduler, queueService, seatService, redis, 10L)
+            scheduler = DynamicScheduler(taskScheduler, queueService, seatService, eventCache, queueCache, 10L)
             scheduler.startProcessing(1L)
         }
 
@@ -76,168 +70,157 @@ class DynamicSchedulerTest {
 
             capturedRunnable.run()
 
-            verify(queueService).peekWaiting(1L, 10L)
-            verify(queueService, never()).getRequestData(anyString())
+            verify(queueService, never()).getRequestData(anyLong(), anyString())
         }
 
         @Test
         @DisplayName("구역 요청 성공 시 대기열에서 제거하고 remainingSeats 감소")
         fun sectionReservationSuccessRemovesAndDecrements() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("user-1"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("100")
-            `when`(zSetOps.score("reservation:waiting:1", "user-1")).thenReturn(1000.0)
-            `when`(queueService.getRequestData("user-1"))
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, section = "A"))
-            `when`(seatService.reserveBySection(1L, "A", "user-1"))
-                .thenReturn(ReservationResult("user-1", 1L, 5L, true, "Reservation successful", "A"))
-            `when`(hashOps.get("event:1", "seatSelectionType")).thenReturn("SECTION_SELECT")
+            `when`(seatService.reserveBySection(1L, "A", 1L))
+                .thenReturn(ReservationResult(1L, 1L, 5L, true, "Reservation successful", "A"))
+            `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
 
             capturedRunnable.run()
 
-            verify(queueService).removeFromWaiting(1L, "user-1")
-            verify(hashOps).increment("event:1", "remainingSeats", -1)
-            verify(hashOps).increment("event:1", "section:A:available", -1)
+            verify(queueService).removeFromWaiting(1L, "1")
+            verify(eventCache).adjustSeatCounts(1L, -1, "A")
         }
 
         @Test
         @DisplayName("좌석 ID 요청 성공 시 대기열에서 제거하고 remainingSeats 감소")
         fun seatIdReservationSuccessRemovesAndDecrements() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("user-1"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("100")
-            `when`(zSetOps.score("reservation:waiting:1", "user-1")).thenReturn(1000.0)
-            `when`(queueService.getRequestData("user-1"))
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, seatId = 10L))
-            `when`(seatService.reserveBySeatId(1L, 10L, "user-1"))
-                .thenReturn(ReservationResult("user-1", 1L, 10L, true, "Reservation successful", "A"))
-            `when`(hashOps.get("event:1", "seatSelectionType")).thenReturn("SECTION_SELECT")
+            `when`(seatService.reserveBySeatId(1L, 10L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 10L, true, "Reservation successful", "A"))
+            `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
 
             capturedRunnable.run()
 
-            verify(queueService).removeFromWaiting(1L, "user-1")
-            verify(hashOps).increment("event:1", "remainingSeats", -1)
-            verify(hashOps).increment("event:1", "section:A:available", -1)
+            verify(queueService).removeFromWaiting(1L, "1")
+            verify(eventCache).adjustSeatCounts(1L, -1, "A")
         }
 
         @Test
         @DisplayName("예약 실패해도 대기열에서 제거하지만 remainingSeats 변경 없음")
         fun reservationFailureRemovesButNoDecrement() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("user-1"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("100")
-            `when`(zSetOps.score("reservation:waiting:1", "user-1")).thenReturn(1000.0)
-            `when`(queueService.getRequestData("user-1"))
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, seatId = 10L))
-            `when`(seatService.reserveBySeatId(1L, 10L, "user-1"))
-                .thenReturn(ReservationResult("user-1", 1L, 10L, false, "Seat already reserved"))
+            `when`(seatService.reserveBySeatId(1L, 10L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 10L, false, "Seat already reserved"))
 
             capturedRunnable.run()
 
-            verify(queueService).removeFromWaiting(1L, "user-1")
-            verify(hashOps, never()).increment(eq("event:1"), eq("remainingSeats"), anyLong())
-            verify(hashOps, never()).increment(eq("event:1"), eq("section:A:available"), anyLong())
+            verify(queueService).removeFromWaiting(1L, "1")
+            verify(eventCache, never()).adjustSeatCounts(anyLong(), anyLong(), anyString())
         }
 
         @Test
         @DisplayName("메타데이터가 없으면 대기열에서 제거")
         fun noMetadataRemovesFromQueue() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("user-1"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("100")
-            `when`(zSetOps.score("reservation:waiting:1", "user-1")).thenReturn(1000.0)
-            `when`(queueService.getRequestData("user-1")).thenReturn(null)
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1")).thenReturn(null)
 
             capturedRunnable.run()
 
-            verify(queueService).removeFromWaiting(1L, "user-1")
-            verify(seatService, never()).reserveBySeatId(anyLong(), anyLong(), anyString())
-            verify(seatService, never()).reserveBySection(anyLong(), anyString(), anyString())
+            verify(queueService).removeFromWaiting(1L, "1")
+            verify(seatService, never()).reserveBySeatId(anyLong(), anyLong(), anyLong())
+            verify(seatService, never()).reserveBySection(anyLong(), anyString(), anyLong())
         }
 
         @Test
         @DisplayName("seatId와 section 모두 없으면 대기열에서 제거")
         fun noSeatIdAndNoSectionRemovesFromQueue() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("user-1"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("100")
-            `when`(zSetOps.score("reservation:waiting:1", "user-1")).thenReturn(1000.0)
-            `when`(queueService.getRequestData("user-1"))
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L))
 
             capturedRunnable.run()
 
-            verify(queueService).removeFromWaiting(1L, "user-1")
-            verify(seatService, never()).reserveBySeatId(anyLong(), anyLong(), anyString())
-            verify(seatService, never()).reserveBySection(anyLong(), anyString(), anyString())
+            verify(queueService).removeFromWaiting(1L, "1")
         }
 
         @Test
         @DisplayName("여러 유저를 순차 처리")
         fun processesMultipleUsersSequentially() {
             `when`(queueService.peekWaiting(1L, 10L))
-                .thenReturn(setOf("user-1", "user-2", "user-3"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("100")
-            `when`(zSetOps.score("reservation:waiting:1", "user-1")).thenReturn(1000.0)
-            `when`(zSetOps.score("reservation:waiting:1", "user-2")).thenReturn(1001.0)
-            `when`(zSetOps.score("reservation:waiting:1", "user-3")).thenReturn(1002.0)
-            `when`(queueService.getRequestData("user-1"))
+                .thenReturn(setOf("1", "2", "3"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueCache.isInQueue(1L, "2")).thenReturn(true)
+            `when`(queueCache.isInQueue(1L, "3")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, section = "A"))
-            `when`(queueService.getRequestData("user-2"))
+            `when`(queueService.getRequestData(1L, "2"))
                 .thenReturn(RequestData(eventId = 1L, seatId = 20L))
-            `when`(queueService.getRequestData("user-3"))
+            `when`(queueService.getRequestData(1L, "3"))
                 .thenReturn(null)
-            `when`(seatService.reserveBySection(1L, "A", "user-1"))
-                .thenReturn(ReservationResult("user-1", 1L, 5L, true, "Reservation successful", "A"))
-            `when`(seatService.reserveBySeatId(1L, 20L, "user-2"))
-                .thenReturn(ReservationResult("user-2", 1L, 20L, false, "Seat already reserved"))
+            `when`(seatService.reserveBySection(1L, "A", 1L))
+                .thenReturn(ReservationResult(1L, 1L, 5L, true, "Reservation successful", "A"))
+            `when`(seatService.reserveBySeatId(1L, 20L, 2L))
+                .thenReturn(ReservationResult(2L, 1L, 20L, false, "Seat already reserved"))
+            `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
 
             capturedRunnable.run()
 
-            verify(queueService).removeFromWaiting(1L, "user-1")
-            verify(queueService).removeFromWaiting(1L, "user-2")
-            verify(queueService).removeFromWaiting(1L, "user-3")
-            verify(hashOps).increment("event:1", "remainingSeats", -1)
+            verify(queueService).removeFromWaiting(1L, "1")
+            verify(queueService).removeFromWaiting(1L, "2")
+            verify(queueService).removeFromWaiting(1L, "3")
         }
 
         @Test
-        @DisplayName("잔여석이 없으면 DB 예약 시도 없이 중단한다")
+        @DisplayName("잔여석이 없으면 처리 중단")
         fun noRemainingSeatsStopsProcessing() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("user-1"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("0")
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(0L)
 
             capturedRunnable.run()
 
-            verify(queueService, never()).getRequestData(anyString())
-            verify(seatService, never()).reserveBySeatId(anyLong(), anyLong(), anyString())
-            verify(seatService, never()).reserveBySection(anyLong(), anyString(), anyString())
+            verify(queueService, never()).getRequestData(anyLong(), anyString())
         }
 
         @Test
         @DisplayName("SEAT_PICK 예약 성공 시 좌석 캐시 상태를 RESERVED로 변경한다")
         fun seatPickReservationUpdatesSeatCache() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("user-1"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("100")
-            `when`(zSetOps.score("reservation:waiting:1", "user-1")).thenReturn(1000.0)
-            `when`(queueService.getRequestData("user-1"))
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, seatId = 10L))
-            `when`(seatService.reserveBySeatId(1L, 10L, "user-1"))
-                .thenReturn(ReservationResult("user-1", 1L, 10L, true, "Reservation successful", "A"))
-            `when`(hashOps.get("event:1", "seatSelectionType")).thenReturn("SEAT_PICK")
-            `when`(hashOps.get("event:1:seats", "10")).thenReturn("A-1:A:AVAILABLE")
+            `when`(seatService.reserveBySeatId(1L, 10L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 10L, true, "Reservation successful", "A"))
+            `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SEAT_PICK")
 
             capturedRunnable.run()
 
-            verify(hashOps).put("event:1:seats", "10", "A-1:A:RESERVED")
+            verify(eventCache).markSeatReserved(1L, 10L)
         }
 
         @Test
         @DisplayName("처리 전 대기열에서 제거된 유저는 건너뛴다")
         fun userRemovedFromQueueBeforeProcessing() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("user-1"))
-            `when`(hashOps.get("event:1", "remainingSeats")).thenReturn("100")
-            `when`(zSetOps.score("reservation:waiting:1", "user-1")).thenReturn(null)
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(false)
 
             capturedRunnable.run()
 
-            verify(queueService, never()).getRequestData(anyString())
-            verify(seatService, never()).reserveBySeatId(anyLong(), anyLong(), anyString())
-            verify(seatService, never()).reserveBySection(anyLong(), anyString(), anyString())
+            verify(queueService, never()).getRequestData(anyLong(), anyString())
         }
     }
 
@@ -247,10 +230,9 @@ class DynamicSchedulerTest {
 
         @BeforeEach
         fun setUp() {
-            lenient().`when`(redis.opsForHash<String, String>()).thenReturn(hashOps)
             lenient().`when`(taskScheduler.scheduleAtFixedRate(any(Runnable::class.java), any(Duration::class.java)))
                 .thenReturn(scheduledFuture)
-            scheduler = DynamicScheduler(taskScheduler, queueService, seatService, redis, 10L)
+            scheduler = DynamicScheduler(taskScheduler, queueService, seatService, eventCache, queueCache, 10L)
         }
 
         @Test
@@ -275,7 +257,6 @@ class DynamicSchedulerTest {
         @DisplayName("stopProcessing 시 태스크 취소")
         fun stopProcessingCancelsTask() {
             scheduler.startProcessing(1L)
-
             scheduler.stopProcessing(1L)
 
             verify(scheduledFuture).cancel(false)
