@@ -1,13 +1,13 @@
 package com.epstein.practice.reserveservice.service
 
 import com.epstein.practice.reserveservice.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.constant.parseSeatValue
 import com.epstein.practice.reserveservice.constant.sectionAvailableField
 import com.epstein.practice.reserveservice.constant.sectionTotalField
+import com.epstein.practice.reserveservice.dto.SeatMapEntry
 import com.epstein.practice.reserveservice.dto.SectionAvailabilityResponse
 import com.epstein.practice.reserveservice.entity.SeatStatus
 import com.epstein.practice.reserveservice.repository.SeatRepository
-import org.slf4j.LoggerFactory
-import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -17,41 +17,68 @@ class SeatService(
     private val seatRepository: SeatRepository,
     private val eventCache: EventCacheRepository
 ) {
-    private val logger = LoggerFactory.getLogger(SeatService::class.java)
-
     @Transactional
     fun reserveBySeatId(eventId: Long, seatId: Long, userId: Long): ReservationResult {
         val seat = seatRepository.findByEventIdAndId(eventId, seatId)
-            ?: return ReservationResult(userId, eventId, seatId, false, "Seat not found")
+            ?: return ReservationResult(userId, eventId, seatId, false, "seat not found")
 
         if (seat.status != SeatStatus.AVAILABLE) {
-            return ReservationResult(userId, eventId, seatId, false, "Seat already reserved")
+            return ReservationResult(userId, eventId, seatId, false, "seat already reserved")
         }
 
         seat.status = SeatStatus.RESERVED
         seat.userId = userId
         seat.reservedAt = LocalDateTime.now()
+        seatRepository.save(seat)
 
-        return try {
-            seatRepository.save(seat)
-            ReservationResult(userId, eventId, seatId, true, "Reservation successful", seat.section)
-        } catch (e: ObjectOptimisticLockingFailureException) {
-            logger.warn("Optimistic lock conflict for seat {} in event {} by user {}", seatId, eventId, userId)
-            ReservationResult(userId, eventId, seatId, false, "Seat was taken by another user")
-        }
+        return ReservationResult(userId, eventId, seatId, true, "reservation successful", seat.section)
+    }
+
+    @Transactional
+    fun reserveBySection(eventId: Long, section: String, userId: Long): ReservationResult {
+        val seat = seatRepository.findFirstAvailableSeatForUpdate(eventId, section)
+            ?: return ReservationResult(userId, eventId, 0, false, "no available seat in section $section")
+
+        seat.status = SeatStatus.RESERVED
+        seat.userId = userId
+        seat.reservedAt = LocalDateTime.now()
+        seatRepository.save(seat)
+
+        return ReservationResult(userId, eventId, seat.id, true, "seat ${seat.seatNumber} reserved", section)
     }
 
     @Transactional
     fun releaseSeat(eventId: Long, userId: Long): ReservationResult {
         val seat = seatRepository.findByEventIdAndUserId(eventId, userId)
-            ?: return ReservationResult(userId, eventId, 0, false, "No reserved seat found")
+            ?: return ReservationResult(userId, eventId, 0, false, "no reserved seat for user")
 
         seat.status = SeatStatus.AVAILABLE
         seat.userId = null
         seat.reservedAt = null
         seatRepository.save(seat)
 
-        return ReservationResult(userId, eventId, seat.id, true, "Seat released", seat.section)
+        return ReservationResult(userId, eventId, seat.id, true, "seat released", seat.section)
+    }
+
+    fun getSeatMap(eventId: Long, section: String? = null): List<SeatMapEntry> {
+        val raw = eventCache.getAllSeatFields(eventId)
+        if (raw.isEmpty()) return emptyList()
+        val now = System.currentTimeMillis()
+        val entries = mutableListOf<SeatMapEntry>()
+        for ((key, value) in raw) {
+            val seatId = key.toLongOrNull() ?: continue
+            val parsed = parseSeatValue(value) ?: continue
+            if (section != null && parsed.section != section) continue
+            entries.add(
+                SeatMapEntry(
+                    seatId = seatId,
+                    section = parsed.section,
+                    seatNumber = parsed.num,
+                    status = parsed.effectiveStatus(now)
+                )
+            )
+        }
+        return entries.sortedWith(compareBy({ it.section }, { it.seatNumber }))
     }
 
     fun getSectionAvailability(eventId: Long): List<SectionAvailabilityResponse> {
@@ -71,23 +98,7 @@ class SeatService(
         }.sortedBy { it.section }
     }
 
-    @Transactional
-    fun reserveBySection(eventId: Long, section: String, userId: Long): ReservationResult {
-        val seat = seatRepository.findFirstAvailableSeatForUpdate(eventId, section)
-            ?: return ReservationResult(userId, eventId, 0, false, "No available seat in section $section")
 
-        seat.status = SeatStatus.RESERVED
-        seat.userId = userId
-        seat.reservedAt = LocalDateTime.now()
-
-        return try {
-            seatRepository.save(seat)
-            ReservationResult(userId, eventId, seat.id, true, "Seat ${seat.seatNumber} reserved successfully", section)
-        } catch (e: ObjectOptimisticLockingFailureException) {
-            logger.warn("Optimistic lock conflict for section {} in event {} by user {}", section, eventId, userId)
-            ReservationResult(userId, eventId, 0, false, "Seat was taken by another user")
-        }
-    }
 }
 
 data class ReservationResult(

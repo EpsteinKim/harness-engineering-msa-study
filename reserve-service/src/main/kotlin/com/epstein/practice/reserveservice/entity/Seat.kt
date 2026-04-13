@@ -5,12 +5,7 @@ import jakarta.persistence.*
 import java.time.LocalDateTime
 
 @Entity
-@Table(
-    name = "seat",
-    indexes = [
-        Index(name = "idx_seats_event_section", columnList = "event_id, section")
-    ]
-)
+@Table(name = "seat")
 class Seat(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -30,8 +25,8 @@ class Seat(
     @Column(nullable = false, length = 20)
     var status: SeatStatus = SeatStatus.AVAILABLE,
 
-    @Column(name = "reserved_by")
-    var reservedBy: String? = null,
+    @Column(name = "user_id")
+    var userId: Long? = null,
 
     @Column(name = "reserved_at")
     var reservedAt: LocalDateTime? = null,

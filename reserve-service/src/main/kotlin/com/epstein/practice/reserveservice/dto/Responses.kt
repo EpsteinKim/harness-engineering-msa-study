@@ -27,3 +27,10 @@ data class SeatDTO(
     val section: String,
     val status: SeatStatus
 )
+
+data class SeatMapEntry(
+    val seatId: Long,
+    val section: String,
+    val seatNumber: String,
+    val status: String
+)

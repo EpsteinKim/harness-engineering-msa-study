@@ -6,6 +6,7 @@ import com.epstein.practice.reserveservice.service.ReservationService
 import com.epstein.practice.reserveservice.service.SeatService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import java.time.Duration
@@ -50,12 +51,15 @@ class DynamicScheduler(
         for (userId in users) {
             val remaining = eventCache.getRemainingSeats(eventId)
             if (remaining <= 0) {
-                logger.info("No remaining seats for event {}, stopping processing", eventId)
-                break
+                logger.info("No remaining seats for event {}, clearing waiting queue and stopping scheduler", eventId)
+                clearWaitingQueue(eventId)
+                stopProcessing(eventId)
+                return
             }
 
             if (!queueCache.isInQueue(eventId, userId)) {
-                logger.info("User {} already removed from queue, skipping", userId)
+                logger.info("User {} already removed from queue, cleaning up metadata", userId)
+                reserveService.removeFromWaiting(eventId, userId)
                 continue
             }
 
@@ -94,12 +98,26 @@ class DynamicScheduler(
 
                     logger.info("Reservation succeeded: user={}, event={}, seat={}", userId, data.eventId, result.seatId)
                 } else {
+                    if (data.seatId != null) {
+                        eventCache.releaseHold(eventId, data.seatId, userId)
+                    }
                     logger.info("Reservation failed: user={}, reason={}", userId, result.message)
                 }
+            } catch (e: ObjectOptimisticLockingFailureException) {
+                logger.info("Optimistic lock conflict: user={}, event={}, seat={}", userId, eventId, data.seatId)
+                if (data.seatId != null) {
+                    eventCache.releaseHold(eventId, data.seatId, userId)
+                }
+                reserveService.removeFromWaiting(eventId, userId)
             } catch (e: Exception) {
-                logger.error("Unexpected error processing user {} for event {}: {}", userId, eventId, e.message)
+                logger.error("Unexpected error processing user {} for event {}", userId, eventId, e)
                 reserveService.removeFromWaiting(eventId, userId)
             }
         }
+    }
+
+    private fun clearWaitingQueue(eventId: Long) {
+        val allUsers = queueCache.peekQueue(eventId, Long.MAX_VALUE)
+        allUsers.forEach { reserveService.removeFromWaiting(eventId, it) }
     }
 }

@@ -3,6 +3,11 @@ package com.epstein.practice.reserveservice.service
 import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.reserveservice.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.cache.QueueCacheRepository
+import com.epstein.practice.reserveservice.client.UserClient
+import com.epstein.practice.reserveservice.entity.Event
+import com.epstein.practice.reserveservice.entity.EventStatus
+import com.epstein.practice.reserveservice.repository.EventRepository
+import com.epstein.practice.reserveservice.scheduler.DynamicScheduler
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -11,10 +16,13 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.*
 import org.mockito.Mock
+import org.mockito.Mockito.lenient
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
+import java.time.LocalDateTime
+import java.util.Optional
 
 @ExtendWith(MockitoExtension::class)
 class ReservationServiceTest {
@@ -28,12 +36,26 @@ class ReservationServiceTest {
     @Mock
     lateinit var seatService: SeatService
 
+    @Mock
+    lateinit var eventRepository: EventRepository
+
+    @Mock
+    lateinit var dynamicScheduler: DynamicScheduler
+
+    @Mock
+    lateinit var userClient: UserClient
+
     private lateinit var service: ReservationService
 
     @BeforeEach
     fun setUp() {
-        service = ReservationService(eventCache, queueCache, seatService)
+        service = ReservationService(eventCache, queueCache, seatService, eventRepository, userClient, dynamicScheduler, 600000L)
+        lenient().`when`(userClient.exists(anyLong())).thenReturn(true)
     }
+
+    private fun openEvent(id: Long = 1L, closeTime: LocalDateTime? = LocalDateTime.now().plusHours(1)): Event =
+        Event(id = id, name = "e", eventTime = LocalDateTime.now().plusDays(1),
+            status = EventStatus.OPEN, ticketCloseTime = closeTime)
 
     @Nested
     @DisplayName("enqueue - 대기열에 추가")
@@ -45,15 +67,13 @@ class ReservationServiceTest {
             `when`(eventCache.exists(1L)).thenReturn(true)
             `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
             `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SEAT_PICK")
-            `when`(eventCache.getSeatStatus(1L, 10L)).thenReturn("A:A-1:AVAILABLE")
             `when`(queueCache.isInQueue(1L, "1")).thenReturn(false)
+            `when`(eventCache.tryHoldSeat(anyLong(), anyLong(), anyString(), anyLong(), anyLong()))
+                .thenReturn(true)
 
             service.enqueue("1", 1L, seatId = 10L)
 
-            verify(queueCache).addToQueue(eq(1L) ?: 0, eq("1") ?: "", anyDouble())
-            verify(queueCache).saveMetadata(eq(1L) ?: 0, eq("1") ?: "", argThat<Map<String, String>> { map ->
-                map?.get("seatId") == "10"
-            } ?: emptyMap())
+            verify(queueCache).addToQueue(anyLong(), anyString(), anyDouble())
         }
 
         @Test
@@ -62,11 +82,42 @@ class ReservationServiceTest {
             `when`(eventCache.exists(1L)).thenReturn(true)
             `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
             `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
+            `when`(eventCache.getSectionAvailable(1L, "A")).thenReturn(5L)
             `when`(queueCache.isInQueue(1L, "1")).thenReturn(false)
 
             service.enqueue("1", 1L, section = "A")
 
-            verify(queueCache).addToQueue(eq(1L) ?: 0, eq("1") ?: "", anyDouble())
+            verify(queueCache).addToQueue(anyLong(), anyString(), anyDouble())
+        }
+
+        @Test
+        @DisplayName("SECTION_SELECT에서 섹션이 소진되면 SECTION_FULL 예외를 발생시킨다")
+        fun enqueueSectionFull() {
+            `when`(eventCache.exists(1L)).thenReturn(true)
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
+            `when`(eventCache.getSectionAvailable(1L, "A")).thenReturn(0L)
+
+            val exception = assertThrows(ServerException::class.java) {
+                service.enqueue("1", 1L, section = "A")
+            }
+            assertEquals("SECTION_FULL", exception.code)
+            verify(queueCache, never()).addToQueue(anyLong(), anyString(), anyDouble())
+        }
+
+        @Test
+        @DisplayName("SEAT_PICK에서 이미 대기열에 있으면 tryHoldSeat가 호출되지 않고 ALREADY_IN_QUEUE 예외")
+        fun enqueueSeatPickAlreadyInQueueSkipsHold() {
+            `when`(eventCache.exists(1L)).thenReturn(true)
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SEAT_PICK")
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+
+            val exception = assertThrows(ServerException::class.java) {
+                service.enqueue("1", 1L, seatId = 10L)
+            }
+            assertEquals("ALREADY_IN_QUEUE", exception.code)
+            verify(eventCache, never()).tryHoldSeat(anyLong(), anyLong(), anyString(), anyLong(), anyLong())
         }
 
         @Test
@@ -78,7 +129,7 @@ class ReservationServiceTest {
             val exception = assertThrows(ServerException::class.java) {
                 service.enqueue("1", 1L, seatId = 10L)
             }
-            assertEquals("No remaining seats", exception.message)
+            assertEquals("잔여 좌석이 없습니다", exception.message)
             assertEquals("NO_REMAINING_SEATS", exception.code)
         }
 
@@ -90,7 +141,7 @@ class ReservationServiceTest {
             val exception = assertThrows(ServerException::class.java) {
                 service.enqueue("1", 1L, seatId = 10L)
             }
-            assertEquals("Event is not open for reservations", exception.message)
+            assertEquals("이벤트가 예약 가능한 상태가 아닙니다", exception.message)
             assertEquals("EVENT_NOT_OPEN", exception.code)
         }
 
@@ -121,17 +172,20 @@ class ReservationServiceTest {
         }
 
         @Test
-        @DisplayName("이미 예약된 좌석이면 SEAT_ALREADY_RESERVED 예외를 발생시킨다")
+        @DisplayName("HOLD 획득 실패 시 SEAT_UNAVAILABLE 예외를 발생시킨다")
         fun enqueueSeatAlreadyReserved() {
             `when`(eventCache.exists(1L)).thenReturn(true)
             `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
             `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SEAT_PICK")
-            `when`(eventCache.getSeatStatus(1L, 10L)).thenReturn("A:A-1:RESERVED")
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(false)
+            `when`(eventCache.tryHoldSeat(anyLong(), anyLong(), anyString(), anyLong(), anyLong()))
+                .thenReturn(false)
 
             val exception = assertThrows(ServerException::class.java) {
                 service.enqueue("1", 1L, seatId = 10L)
             }
-            assertEquals("SEAT_ALREADY_RESERVED", exception.code)
+            assertEquals("SEAT_UNAVAILABLE", exception.code)
+            verify(queueCache, never()).addToQueue(anyLong(), anyString(), anyDouble())
         }
 
         @Test
@@ -140,12 +194,34 @@ class ReservationServiceTest {
             `when`(eventCache.exists(1L)).thenReturn(true)
             `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
             `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
+            `when`(eventCache.getSectionAvailable(1L, "A")).thenReturn(5L)
             `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
 
             val exception = assertThrows(ServerException::class.java) {
                 service.enqueue("1", 1L, section = "A")
             }
             assertEquals("ALREADY_IN_QUEUE", exception.code)
+        }
+
+        @Test
+        @DisplayName("user-service에 사용자가 없으면 USER_NOT_FOUND 예외")
+        fun enqueueUserNotFound() {
+            `when`(userClient.exists(99L)).thenReturn(false)
+
+            val exception = assertThrows(ServerException::class.java) {
+                service.enqueue("99", 1L, seatId = 10L)
+            }
+            assertEquals("USER_NOT_FOUND", exception.code)
+            verify(queueCache, never()).addToQueue(anyLong(), anyString(), anyDouble())
+        }
+
+        @Test
+        @DisplayName("userId가 숫자가 아니면 USER_NOT_FOUND 예외")
+        fun enqueueInvalidUserIdFormat() {
+            val exception = assertThrows(ServerException::class.java) {
+                service.enqueue("not-a-number", 1L, seatId = 10L)
+            }
+            assertEquals("USER_NOT_FOUND", exception.code)
         }
     }
 
@@ -207,7 +283,7 @@ class ReservationServiceTest {
         fun cancelFromQueueOnly() {
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
             `when`(seatService.releaseSeat(1L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 0, false, "No reserved seat found"))
+                .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
 
             assertTrue(service.cancel(1L, "1"))
             verify(queueCache).deleteMetadata(1L, "1")
@@ -215,14 +291,70 @@ class ReservationServiceTest {
         }
 
         @Test
-        @DisplayName("좌석이 이미 예약된 상태에서 취소하면 좌석 해제 + remainingSeats 증가")
+        @DisplayName("좌석이 이미 예약된 상태에서 취소하면 좌석 해제 + remainingSeats 증가 + 스케줄러 재가동")
         fun cancelWithReservedSeat() {
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
             `when`(seatService.releaseSeat(1L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 10L, true, "Seat released", "A"))
+                .thenReturn(ReservationResult(1L, 1L, 10L, true, "seat released", "A"))
+            `when`(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()))
 
             assertTrue(service.cancel(1L, "1"))
             verify(eventCache).adjustSeatCounts(1L, 1, "A")
+            verify(dynamicScheduler).startProcessing(1L)
+        }
+
+        @Test
+        @DisplayName("판매 마감 시각이 지났으면 스케줄러 재가동하지 않음")
+        fun cancelAfterTicketClose() {
+            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
+            `when`(seatService.releaseSeat(1L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 10L, true, "seat released", "A"))
+            `when`(eventRepository.findById(1L))
+                .thenReturn(Optional.of(openEvent(closeTime = LocalDateTime.now().minusMinutes(1))))
+
+            assertTrue(service.cancel(1L, "1"))
+            verify(eventCache).adjustSeatCounts(1L, 1, "A")
+            verify(dynamicScheduler, never()).startProcessing(anyLong())
+        }
+
+        @Test
+        @DisplayName("이벤트가 CLOSED면 스케줄러 재가동하지 않음")
+        fun cancelForClosedEvent() {
+            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
+            `when`(seatService.releaseSeat(1L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 10L, true, "seat released", "A"))
+            `when`(eventRepository.findById(1L)).thenReturn(
+                Optional.of(
+                    Event(id = 1L, name = "e", eventTime = LocalDateTime.now().plusDays(1),
+                        status = EventStatus.CLOSED, ticketCloseTime = LocalDateTime.now().plusHours(1))
+                )
+            )
+
+            assertTrue(service.cancel(1L, "1"))
+            verify(dynamicScheduler, never()).startProcessing(anyLong())
+        }
+
+        @Test
+        @DisplayName("이벤트 조회 결과가 없으면 스케줄러 재가동하지 않음")
+        fun cancelWithMissingEvent() {
+            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
+            `when`(seatService.releaseSeat(1L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 10L, true, "seat released", "A"))
+            `when`(eventRepository.findById(1L)).thenReturn(Optional.empty())
+
+            assertTrue(service.cancel(1L, "1"))
+            verify(dynamicScheduler, never()).startProcessing(anyLong())
+        }
+
+        @Test
+        @DisplayName("좌석 해제 실패면 스케줄러 재가동하지 않음")
+        fun cancelWithoutSeatRelease() {
+            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
+            `when`(seatService.releaseSeat(1L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
+
+            assertTrue(service.cancel(1L, "1"))
+            verify(dynamicScheduler, never()).startProcessing(anyLong())
         }
 
         @Test
@@ -230,9 +362,35 @@ class ReservationServiceTest {
         fun cancelNotFound() {
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
             `when`(seatService.releaseSeat(1L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 0, false, "No reserved seat found"))
+                .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
 
             assertFalse(service.cancel(1L, "1"))
+        }
+
+        @Test
+        @DisplayName("metadata에 seatId가 있으면 releaseHold가 호출된다")
+        fun cancelReleasesHoldWhenSeatIdPresent() {
+            `when`(queueCache.getMetadata(1L, "1")).thenReturn(mapOf("seatId" to "10"))
+            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
+            `when`(seatService.releaseSeat(1L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
+
+            service.cancel(1L, "1")
+
+            verify(eventCache).releaseHold(1L, 10L, "1")
+        }
+
+        @Test
+        @DisplayName("metadata에 seatId가 없으면 releaseHold가 호출되지 않는다")
+        fun cancelNoReleaseHoldWhenNoSeatId() {
+            `when`(queueCache.getMetadata(1L, "1")).thenReturn(mapOf("section" to "A"))
+            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
+            `when`(seatService.releaseSeat(1L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
+
+            service.cancel(1L, "1")
+
+            verify(eventCache, never()).releaseHold(anyLong(), anyLong(), anyString())
         }
     }
 

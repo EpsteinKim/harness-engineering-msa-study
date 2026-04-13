@@ -3,7 +3,9 @@ package com.epstein.practice.reserveservice.cache
 import com.epstein.practice.reserveservice.constant.eventCacheKey
 import com.epstein.practice.reserveservice.constant.seatCacheKey
 import com.epstein.practice.reserveservice.constant.sectionAvailableField
+import org.springframework.core.io.ClassPathResource
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Repository
 import java.time.Duration
 
@@ -12,6 +14,16 @@ class EventCacheRepository(
     private val redis: StringRedisTemplate
 ) {
     private val hashOps = redis.opsForHash<String, String>()
+
+    private val tryHoldScript: DefaultRedisScript<Long> = DefaultRedisScript<Long>().apply {
+        setLocation(ClassPathResource("redis/try_hold_seat.lua"))
+        resultType = Long::class.java
+    }
+
+    private val releaseHoldScript: DefaultRedisScript<Long> = DefaultRedisScript<Long>().apply {
+        setLocation(ClassPathResource("redis/release_hold.lua"))
+        resultType = Long::class.java
+    }
 
     // === Event Cache ===
 
@@ -52,6 +64,10 @@ class EventCacheRepository(
         section?.let { hashOps.increment(eventCacheKey(eventId), sectionAvailableField(it), delta) }
     }
 
+    fun getSectionAvailable(eventId: Long, section: String): Long {
+        return hashOps.get(eventCacheKey(eventId), sectionAvailableField(section))?.toLongOrNull() ?: 0
+    }
+
     // === Seat Cache ===
 
     fun saveAllSeats(eventId: Long, seatFields: Map<String, String>) {
@@ -70,11 +86,33 @@ class EventCacheRepository(
         return hashOps.get(seatCacheKey(eventId), seatId.toString())
     }
 
+    fun getAllSeatFields(eventId: Long): Map<String, String> {
+        return hashOps.entries(seatCacheKey(eventId))
+    }
+
     fun markSeatReserved(eventId: Long, seatId: Long) {
         val current = getSeatStatus(eventId, seatId) ?: return
         val parts = current.split(":")
         if (parts.size >= 3) {
             hashOps.put(seatCacheKey(eventId), seatId.toString(), "${parts[0]}:${parts[1]}:RESERVED")
         }
+    }
+
+    fun tryHoldSeat(eventId: Long, seatId: Long, userId: String, nowMs: Long, ttlMs: Long): Boolean {
+        val result = redis.execute(
+            tryHoldScript,
+            listOf(seatCacheKey(eventId)),
+            seatId.toString(), userId, nowMs.toString(), ttlMs.toString()
+        )
+        return result == 1L
+    }
+
+    fun releaseHold(eventId: Long, seatId: Long, userId: String): Boolean {
+        val result = redis.execute(
+            releaseHoldScript,
+            listOf(seatCacheKey(eventId)),
+            seatId.toString(), userId
+        )
+        return result == 1L
     }
 }

@@ -16,15 +16,16 @@
 [API Gateway]  ← Spring Cloud Gateway (WebFlux)
    ├──► [Reserve Service :8080]  ← 좌석 예약 + 대기열 (MVC + JPA + Redis, 낙관적 락)
    │         ├──► [NeonDB (PostgreSQL)]
-   │         └──► [Redis]  ← 예약 대기열 상태
-   ├──► [User Service :8080]     ← 사용자 관리 (MVC + JPA)
+   │         ├──► [Redis]  ← 예약 대기열 상태, 좌석 HOLD 상태
+   │         └──► [User Service]  ← enqueue 시 userId 존재 검증 (RestClient)
+   ├──► [User Service :8080]     ← 사용자 조회/수정 (MVC + JPA)
    │         └──► [NeonDB (PostgreSQL)]
    └──► [Redis]                  ← 대기열 상태, 요청 메타데이터
 ```
 
 - Gateway만 외부 포트(8080) 노출, 나머지 서비스는 Docker 내부 네트워크로만 통신
 - 서비스 간 통신은 Docker DNS(컨테이너명)를 통해 라우팅
-- 대기열 로직은 reserve-service 내부에서 Redis로 관리 (서비스 간 HTTP 호출 없음)
+- reserve-service → user-service 동기 HTTP 호출 (예약 enqueue 시 userId 검증)
 
 ### 목표 (Phase 3 - K8s)
 
@@ -38,7 +39,7 @@
 |--------|------|-------------------|------|------|
 | gateway | **운영중** | 8080 / 8080 | 라우팅, 단일 진입점 | Spring Cloud Gateway (WebFlux) |
 | reserve-service | **운영중** | 8082 / 8080 | 좌석 예약 + 대기열/스로틀링 (낙관적 락 + SKIP LOCKED) | Spring Boot MVC, JPA, QueryDSL, Redis, Kotlin |
-| user-service | **개발중** | 8081 / 8080 | 사용자 CRUD | Spring Boot MVC, JPA, Kotlin |
+| user-service | **운영중** | 8081 / 8080 | 사용자 조회/수정 (인증 미도입, 학습 우선) | Spring Boot MVC, JPA, Kotlin |
 | redis | **운영중** | 6379 / 6379 | reserve-service 대기열 상태 관리 | Redis 7 Alpine |
 
 ---
@@ -50,6 +51,7 @@
 | Path | 대상 서비스 |
 |------|------------|
 | `/api/v1/reservations/**` | reserve-service |
+| `/api/v1/reservations/seats/**` | reserve-service (좌석 맵/구역 잔여석) |
 | `/api/v1/users/**` | user-service |
 
 ### 환경별 라우팅
@@ -65,7 +67,7 @@
 
 - **프로토콜**: REST (JSON)
 - **외부 → 내부**: Gateway를 통한 HTTP 라우팅
-- **서비스 간 직접 통신 없음**: 각 서비스가 독립적으로 동작
+- **서비스 간 통신**: reserve-service → user-service (RestClient, enqueue 시 `GET /api/v1/users/{id}`로 userId 검증)
 - **응답 표준**: `ApiResponse<T>` (common 모듈에서 공유)
   ```json
   { "status": "success|error", "data": {}, "message": "", "code": "" }
@@ -75,15 +77,17 @@
 
 ```
 1. Client → POST /api/v1/reservations (userId, eventId, seatId 또는 section)
-2. reserve-service → Redis 캐시 검증 (이벤트 열림, 잔여석, 타입별 검증)
-3. reserve-service → Redis waiting ZSET에 등록 + 메타데이터 Hash 저장
-4. DynamicScheduler (이벤트별 독립 스레드, 1초 간격) → waiting에서 N건 peek
-5. ZSCORE로 취소 여부 재확인 → 예약 실행:
+2. reserve-service → user-service GET /api/v1/users/{id} (RestClient, USER_NOT_FOUND 사전 거부)
+3. reserve-service → Redis 캐시 검증 (이벤트 열림, 잔여석, 섹션 소진 여부)
+4. SEAT_PICK이면 → Lua tryHoldSeat (HOLD 획득, 실패 시 SEAT_UNAVAILABLE)
+5. reserve-service → Redis waiting ZSET 등록 + 메타데이터 Hash 저장
+6. DynamicScheduler (이벤트별 독립 스레드, 1초 간격) → waiting에서 N건 peek
+7. isInQueue 재확인 → 예약 실행:
    - SECTION_SELECT: reserveBySection() (FOR UPDATE SKIP LOCKED)
-   - SEAT_PICK: reserveBySeatId() (낙관적 락)
-6. 성공 시 → 큐에서 제거, Redis 캐시 갱신 (remainingSeats, 구역별 available, 좌석 상태)
-7. 실패 시 → 큐에서 제거, 로그 기록
-8. 예외 발생 시 → try-catch로 스케줄러 보호, 해당 유저만 스킵
+   - SEAT_PICK: reserveBySeatId() (낙관적 락) → 성공 시 markSeatReserved
+8. 성공 시 → 큐에서 제거, Redis 캐시 갱신 (remainingSeats, 구역별 available, 좌석 상태)
+9. 실패/낙관적 락 충돌 시 → SEAT_PICK이면 releaseHold, 큐에서 제거
+10. 잔여석 0 또는 이벤트 종료 시 → 큐 정리 + 스케줄러 중단 (cancel로 잔여석 복구되면 재시작)
 ```
 
 ### 비동기 (계획)
@@ -125,15 +129,31 @@ seats  (id, event_id FK, seat_number, section, status, reserved_by, reserved_at,
 | Key | Type | 용도 |
 |-----|------|------|
 | `event:{eventId}` | Hash | 이벤트 캐시 (name, remainingSeats, seatSelectionType, 구역별 available/total, TTL=ticketCloseTime) |
-| `event:{eventId}:seats` | Hash | 좌석별 상태 캐시 (SEAT_PICK만, field=seatId, value="seatNumber:section:status") |
+| `event:{eventId}:seats` | Hash | 좌석별 상태 캐시 (SEAT_PICK만, field=seatId, value=`section:num:STATUS[:userId:heldUntilMs]`) |
 | `reservation:waiting:{eventId}` | Sorted Set (score=timestamp) | 이벤트별 대기열 |
 | `reservation:metadata:{eventId}:{userId}` | Hash (seatId/section) | 예약 요청 메타데이터 (이벤트별 독립) |
+
+좌석 캐시 값 포맷:
+- `"A:A-1:AVAILABLE"`
+- `"A:A-1:HELD:42:1762000000000"` (HOLD: userId, 만료 ms epoch)
+- `"A:A-1:RESERVED"`
+
+HOLD 상태 전이는 Lua 스크립트로 원자성 보장 (`try_hold_seat.lua`, `release_hold.lua`). 만료 처리는 lazy (조회/HOLD 시도 시점에 판정).
+
+### DB 스키마 (user-service)
+
+```sql
+user_account (id BIGSERIAL PK, email VARCHAR(255) UNIQUE, name VARCHAR(100), password VARCHAR(255), created_at TIMESTAMP)
+```
+
+- 학습용으로 password는 plain text, 인증 미도입
+- 시드 데이터: 한국식 이름 10,000명 (`db/seed.sql`)
 
 ### DB 연결
 
 - **드라이버**: JDBC (JPA/Hibernate) — reserve-service, user-service
 - **접속 정보**: `.env` 파일로 관리 (gitignore 처리됨)
-- **환경변수**: `NEONDB_URL`, `NEONDB_USERNAME`, `NEONDB_PASSWORD`
+- **환경변수** (서비스별 분리): `RESERVE_DB_URL/USERNAME/PASSWORD`, `USER_DB_URL/USERNAME/PASSWORD`
 
 ---
 
@@ -221,3 +241,5 @@ harness-back/
 | 2026-04-08 | v5.0.0 | 좌석 시스템 리디자인: section 기반 자동 배정(SKIP LOCKED), QueryDSL 도입, 공통 예외 처리, springdoc, 로컬 개발 환경 정비 | - |
 | 2026-04-09 | v6.0.0 | reserve-service 리팩토링: 이벤트별 동적 스케줄링, Redis 캐시 전략(remainingSeats/구역별/좌석별), seatSelectionType 추가, 동시성 이슈 수정 | - |
 | 2026-04-10 | v7.0.0 | 에러 처리 통일(ServerException+ErrorCode), API 통합(enqueue 1개, cancel에 eventId), metadata 키 이벤트별 분리, 스케줄러 안정성 강화, 부하테스트 구축 | - |
+| 2026-04-12 | v8.0.0 | SEAT_PICK HOLD(Lua 원자성, lazy expiry), SECTION_FULL 거부, 좌석 맵 조회 API, 스케줄러 ScheduledFuture 관리 + 잔여석 0 시 큐 정리, GlobalExceptionHandler scanBasePackages 수정 | - |
+| 2026-04-13 | v9.0.0 | user-service 기본 기능(read/update + 한국식 이름 10,000명 시드), reserve→user RestClient 인터서비스 호출(USER_NOT_FOUND), DB 환경변수 서비스별 분리 | - |

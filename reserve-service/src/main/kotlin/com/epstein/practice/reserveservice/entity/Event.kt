@@ -4,7 +4,12 @@ import jakarta.persistence.*
 import java.time.LocalDateTime
 
 @Entity
-@Table(name = "event")
+@Table(
+    name = "event",
+    indexes = [
+        Index(name = "idx_event_status", columnList = "status")
+    ]
+)
 class Event(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

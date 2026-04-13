@@ -89,6 +89,7 @@ Phase 단계별 진행. 현재 Phase 2 (Docker Compose MSA).
 - 서비스 간 직접 DB 접근 금지 (Database per Service 원칙).
 - Kotlin nullable 최소화, early return 패턴 사용.
 - Compiler flags: `-Xjsr305=strict` (null-safety 엄격 모드 적용됨).
+- **사용자 노출 메시지(`ServerException`, `ApiResponse.message`, API 응답 등)는 한글로 작성할 것.** 로그 메시지는 영문 유지(관측/검색 편의). 예외 코드(ErrorCode)는 영문 대문자 스네이크 케이스 그대로.
 
 ## Documentation Structure
 

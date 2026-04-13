@@ -1,7 +1,6 @@
 package com.epstein.practice.reserveservice.service
 
-import com.epstein.practice.reserveservice.constant.eventCacheKey
-import com.epstein.practice.reserveservice.constant.seatCacheKey
+import com.epstein.practice.reserveservice.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.constant.sectionAvailableField
 import com.epstein.practice.reserveservice.constant.sectionTotalField
 import com.epstein.practice.reserveservice.entity.Event
@@ -11,8 +10,8 @@ import com.epstein.practice.reserveservice.repository.EventRepository
 import com.epstein.practice.reserveservice.repository.SeatRepository
 import com.epstein.practice.reserveservice.repository.support.SeatQueryRepository
 import com.epstein.practice.reserveservice.scheduler.DynamicScheduler
+import com.fasterxml.jackson.databind.util.JSONPObject
 import org.slf4j.LoggerFactory
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
@@ -23,7 +22,7 @@ class EventService(
     private val eventRepository: EventRepository,
     private val seatRepository: SeatRepository,
     private val seatQueryRepository: SeatQueryRepository,
-    private val redis: StringRedisTemplate,
+    private val eventCache: EventCacheRepository,
     private val dynamicScheduler: DynamicScheduler
 ) {
     private val logger = LoggerFactory.getLogger(EventService::class.java)
@@ -36,7 +35,7 @@ class EventService(
         for (event in events) {
             event.status = EventStatus.OPEN
             eventRepository.save(event)
-            redisCacheEvent(event)
+            cacheEvent(event)
             dynamicScheduler.startProcessing(event.id)
             logger.info("Opened event: id={}, name={}", event.id, event.name)
         }
@@ -51,8 +50,8 @@ class EventService(
         for (event in events) {
             event.status = EventStatus.CLOSED
             eventRepository.save(event)
-            redis.delete(eventCacheKey(event.id))
-            redis.delete(seatCacheKey(event.id))
+            eventCache.deleteEvent(event.id)
+            eventCache.deleteSeatCache(event.id)
             dynamicScheduler.stopProcessing(event.id)
             logger.info("Closed event: id={}, name={}", event.id, event.name)
         }
@@ -62,23 +61,32 @@ class EventService(
     fun getOpenEventIds(): List<Long> =
         eventRepository.findByStatus(EventStatus.OPEN).map { it.id }
 
+    fun warmupCache(): Int {
+        val openEvents = eventRepository.findByStatus(EventStatus.OPEN)
+        for (event in openEvents) {
+            cacheEvent(event)
+            dynamicScheduler.startProcessing(event.id)
+            logger.info("Warmed up cache for event: id={}, name={}", event.id, event.name)
+        }
+        return openEvents.size
+    }
+
     fun isEventOpen(eventId: Long): Boolean {
-        return redis.hasKey(eventCacheKey(eventId)) == true
+        return eventCache.exists(eventId)
     }
 
     fun syncAllRemainingSeats(): Int {
         val openEvents = eventRepository.findByStatus(EventStatus.OPEN)
-        val hashOps = redis.opsForHash<String, String>()
         for (event in openEvents) {
+            logger.info("Syncing seats for event: id={}, name={}", event.id, event.name)
             dynamicScheduler.stopProcessing(event.id)
             try {
-                val key = eventCacheKey(event.id)
                 val actualCount = seatRepository.countAvailableSeats(event.id)
-                hashOps.put(key, "remainingSeats", actualCount.toString())
+                eventCache.setField(event.id, "remainingSeats", actualCount.toString())
 
                 val sectionData = seatQueryRepository.countAvailableBySection(event.id)
                 for (section in sectionData) {
-                    hashOps.put(key, sectionAvailableField(section.section), section.availableCount.toString())
+                    eventCache.setField(event.id, sectionAvailableField(section.section), section.availableCount.toString())
                 }
 
                 if (event.seatSelectionType == SeatSelectionType.SEAT_PICK) {
@@ -91,8 +99,7 @@ class EventService(
         return openEvents.size
     }
 
-    private fun redisCacheEvent(event: Event) {
-        val key = eventCacheKey(event.id)
+    private fun cacheEvent(event: Event) {
         val remainingSeats = seatRepository.countAvailableSeats(event.id)
         val fields = mutableMapOf(
             "name" to event.name,
@@ -108,18 +115,18 @@ class EventService(
             fields[sectionTotalField(section.section)] = section.totalCount.toString()
         }
 
-        redis.opsForHash<String, String>().putAll(key, fields)
+        eventCache.saveEvent(event.id, fields)
 
         val closeTime = event.ticketCloseTime ?: return
         val ttl = Duration.between(LocalDateTime.now(), closeTime)
         if (!ttl.isNegative) {
-            redis.expire(key, ttl)
+            eventCache.expireEvent(event.id, ttl)
         }
 
         if (event.seatSelectionType == SeatSelectionType.SEAT_PICK) {
             cacheAllSeats(event.id)
-            if (closeTime != null && !ttl.isNegative) {
-                redis.expire(seatCacheKey(event.id), ttl)
+            if (!ttl.isNegative) {
+                eventCache.expireSeatCache(event.id, ttl)
             }
         }
     }
@@ -129,8 +136,8 @@ class EventService(
         if (seats.isEmpty()) return
 
         val seatFields = seats.associate { seat ->
-            seat.id.toString() to "${seat.seatNumber}:${seat.section}:${seat.status.name}"
+            seat.id.toString() to "${seat.section}:${seat.seatNumber}:${seat.status.name}"
         }
-        redis.opsForHash<String, String>().putAll(seatCacheKey(eventId), seatFields)
+        eventCache.saveAllSeats(eventId, seatFields)
     }
 }
