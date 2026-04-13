@@ -30,4 +30,6 @@ interface SeatRepository : JpaRepository<Seat, Long> {
 
     @Query("SELECT COUNT(s) FROM Seat s WHERE s.event.id = :eventId AND s.status = com.epstein.practice.reserveservice.entity.SeatStatus.AVAILABLE")
     fun countAvailableSeats(@Param("eventId") eventId: Long): Long
+
+    fun findByEventIdAndUserId(eventId: Long, userId: Long): Seat?
 }

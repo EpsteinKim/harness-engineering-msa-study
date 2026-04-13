@@ -11,6 +11,7 @@ import org.mockito.Mockito.*
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.data.redis.core.HashOperations
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.RedisScript
 import java.time.Duration
 
 @ExtendWith(MockitoExtension::class)
@@ -137,6 +138,107 @@ class EventCacheRepositoryTest {
             `when`(hashOps.get("event:1:seats", "10")).thenReturn(null)
             eventCache.markSeatReserved(1L, 10L)
             verify(hashOps, never()).put(anyString(), anyString(), anyString())
+        }
+
+        @Test
+        @DisplayName("getAllSeatFields - seat 해시의 모든 필드를 반환")
+        fun getAllSeatFields() {
+            val entries = mapOf(
+                "10" to "A:A-1:AVAILABLE",
+                "11" to "A:A-2:RESERVED"
+            )
+            `when`(hashOps.entries("event:1:seats")).thenReturn(entries)
+            assertEquals(entries, eventCache.getAllSeatFields(1L))
+        }
+    }
+
+    @Nested
+    @DisplayName("Hold / Release (Lua)")
+    inner class HoldReleaseOps {
+
+        @Test
+        @DisplayName("tryHoldSeat - Lua 반환 1L이면 true")
+        fun tryHoldSeatSuccess() {
+            doReturn(1L).`when`(redis).execute(
+                any<RedisScript<Long>>(),
+                anyList<String>(),
+                any(), any(), any(), any()
+            )
+
+            val ok = eventCache.tryHoldSeat(1L, 10L, "user-1", 1000L, 60000L)
+            assertTrue(ok)
+
+            verify(redis).execute(
+                any<RedisScript<Long>>(),
+                anyList<String>(),
+                any(), any(), any(), any()
+            )
+        }
+
+        @Test
+        @DisplayName("tryHoldSeat - Lua 반환 0L이면 false")
+        fun tryHoldSeatFailure() {
+            doReturn(0L).`when`(redis).execute(
+                any<RedisScript<Long>>(),
+                anyList<String>(),
+                any(), any(), any(), any()
+            )
+
+            val ok = eventCache.tryHoldSeat(1L, 10L, "user-1", 1000L, 60000L)
+            assertFalse(ok)
+        }
+
+        @Test
+        @DisplayName("releaseHold - Lua 반환 1L이면 true")
+        fun releaseHoldSuccess() {
+            doReturn(1L).`when`(redis).execute(
+                any<RedisScript<Long>>(),
+                anyList<String>(),
+                any(), any()
+            )
+
+            val ok = eventCache.releaseHold(1L, 10L, "user-1")
+            assertTrue(ok)
+
+            verify(redis).execute(
+                any<RedisScript<Long>>(),
+                anyList<String>(),
+                any(), any()
+            )
+        }
+
+        @Test
+        @DisplayName("releaseHold - Lua 반환 0L이면 false")
+        fun releaseHoldFailure() {
+            doReturn(0L).`when`(redis).execute(
+                any<RedisScript<Long>>(),
+                anyList<String>(),
+                any(), any()
+            )
+
+            val ok = eventCache.releaseHold(1L, 10L, "user-1")
+            assertFalse(ok)
+        }
+
+        @Test
+        @DisplayName("getSectionAvailable - 숫자 필드값을 Long으로 반환")
+        fun getSectionAvailableNumber() {
+            `when`(hashOps.get("event:1", "section:A:available")).thenReturn("7")
+            assertEquals(7L, eventCache.getSectionAvailable(1L, "A"))
+        }
+
+        @Test
+        @DisplayName("getSectionAvailable - null이면 0 반환")
+        fun getSectionAvailableNull() {
+            `when`(hashOps.get("event:1", "section:A:available")).thenReturn(null)
+            assertEquals(0L, eventCache.getSectionAvailable(1L, "A"))
+        }
+
+        @Test
+        @DisplayName("getSectionAvailable - 숫자가 아니면 0 반환")
+        fun getSectionAvailableNonNumeric() {
+            `when`(hashOps.get("event:1", "section:A:available")).thenReturn("abc")
+            assertEquals(0L, eventCache.getSectionAvailable(1L, "A"))
         }
     }
 }

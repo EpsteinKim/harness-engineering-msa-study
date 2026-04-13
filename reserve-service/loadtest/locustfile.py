@@ -24,19 +24,13 @@ from locust import HttpUser, task, between
 SEAT_PICK_EVENT_ID = 1
 SECTION_SELECT_EVENT_ID = 2
 SECTIONS = ["A", "B", "C", "D"]
-MAX_SEAT_ID = 800       # 전체 좌석 수
+MAX_SEAT_ID = 400       # 전체 좌석 수
 HOT_SEAT_ID = 50        # 인기 좌석 범위 (경쟁 유도)
 
 # 전역 요청 제한
-MAX_REQUESTS = 1000
-_request_count = itertools.count(0)
 _user_counter = itertools.count(1)
 _counter_lock = threading.Lock()
 
-
-def is_limit_reached() -> bool:
-    with _counter_lock:
-        return next(_request_count) >= MAX_REQUESTS
 
 
 def next_user_id() -> str:
@@ -50,65 +44,59 @@ def is_business_error(response):
         response.success()
 
 
-def stop_if_limit(user):
-    """MAX_REQUESTS 도달 시 테스트 종료"""
-    if is_limit_reached():
-        user.environment.runner.quit()
-        return True
-    return False
 
 
-class SectionSelectUser(HttpUser):
-    """SECTION_SELECT 이벤트(ID=2) 시나리오: 구역 선택 후 자동 배정"""
-
-    host = "http://localhost:8082"
-    wait_time = between(0.05, 0.3)
-    weight = 3
-
-    def on_start(self):
-        self.last_user_id = None
-
-    @task(10)
-    def enqueue_section(self):
-        if stop_if_limit(self):
-            return
-        uid = next_user_id()
-        self.last_user_id = uid
-        with self.client.post(
-            "/api/v1/reservations",
-            json={
-                "userId": uid,
-                "eventId": SECTION_SELECT_EVENT_ID,
-                "section": random.choice(SECTIONS),
-            },
-            name="POST /reservations [section]",
-            catch_response=True,
-        ) as response:
-            is_business_error(response)
-
-    @task(3)
-    def check_sections(self):
-        if stop_if_limit(self):
-            return
-        self.client.get(
-            f"/api/v1/reservations/seats/{SECTION_SELECT_EVENT_ID}/sections",
-            name="GET /seats/[eventId]/sections",
-        )
-
-    @task(1)
-    def cancel(self):
-        if stop_if_limit(self):
-            return
-        uid = self.last_user_id
-        if uid is None:
-            return
-        with self.client.delete(
-            f"/api/v1/reservations/queue/{SECTION_SELECT_EVENT_ID}/{uid}",
-            name="DELETE /reservations/queue/[eventId]/[userId]",
-            catch_response=True,
-        ) as response:
-            is_business_error(response)
-        self.last_user_id = None
+# class SectionSelectUser(HttpUser):
+#     """SECTION_SELECT 이벤트(ID=2) 시나리오: 구역 선택 후 자동 배정"""
+#
+#     host = "http://localhost:8082"
+#     wait_time = between(0.05, 0.3)
+#     weight = 3
+#
+#     def on_start(self):
+#         self.last_user_id = None
+#
+#     @task(10)
+#     def enqueue_section(self):
+#         if stop_if_limit(self):
+#             return
+#         uid = next_user_id()
+#         self.last_user_id = uid
+#         with self.client.post(
+#             "/api/v1/reservations",
+#             json={
+#                 "userId": uid,
+#                 "eventId": SECTION_SELECT_EVENT_ID,
+#                 "section": random.choice(SECTIONS),
+#             },
+#             name="POST /reservations [section]",
+#             catch_response=True,
+#         ) as response:
+#             is_business_error(response)
+#
+#     @task(3)
+#     def check_sections(self):
+#         if stop_if_limit(self):
+#             return
+#         self.client.get(
+#             f"/api/v1/reservations/seats/{SECTION_SELECT_EVENT_ID}/sections",
+#             name="GET /seats/[eventId]/sections",
+#         )
+#
+#     @task(1)
+#     def cancel(self):
+#         if stop_if_limit(self):
+#             return
+#         uid = self.last_user_id
+#         if uid is None:
+#             return
+#         with self.client.delete(
+#             f"/api/v1/reservations/queue/{SECTION_SELECT_EVENT_ID}/{uid}",
+#             name="DELETE /reservations/queue/[eventId]/[userId]",
+#             catch_response=True,
+#         ) as response:
+#             is_business_error(response)
+#         self.last_user_id = None
 
 
 class SeatPickUser(HttpUser):
@@ -123,8 +111,6 @@ class SeatPickUser(HttpUser):
 
     @task(10)
     def enqueue_seat(self):
-        if stop_if_limit(self):
-            return
         uid = next_user_id()
         self.last_user_id = uid
         # 70% 인기 좌석(1~50)에 몰려서 동시성 경쟁 유도
@@ -147,8 +133,6 @@ class SeatPickUser(HttpUser):
 
     @task(3)
     def check_sections(self):
-        if stop_if_limit(self):
-            return
         self.client.get(
             f"/api/v1/reservations/seats/{SEAT_PICK_EVENT_ID}/sections",
             name="GET /seats/[eventId]/sections",
@@ -156,8 +140,6 @@ class SeatPickUser(HttpUser):
 
     @task(1)
     def cancel(self):
-        if stop_if_limit(self):
-            return
         uid = self.last_user_id
         if uid is None:
             return
@@ -169,26 +151,26 @@ class SeatPickUser(HttpUser):
             is_business_error(response)
         self.last_user_id = None
 
-
-class BurstUser(HttpUser):
-    """티켓 오픈 직후 폭주 시나리오: 이벤트 2(SECTION_SELECT) 대상"""
-
-    host = "http://localhost:8082"
-    wait_time = between(0, 0.05)
-    weight = 1
-
-    @task
-    def enqueue(self):
-        if stop_if_limit(self):
-            return
-        with self.client.post(
-            "/api/v1/reservations",
-            json={
-                "userId": next_user_id(),
-                "eventId": SECTION_SELECT_EVENT_ID,
-                "section": random.choice(SECTIONS),
-            },
-            name="POST /reservations [burst]",
-            catch_response=True,
-        ) as response:
-            is_business_error(response)
+#
+# class BurstUser(HttpUser):
+#     """티켓 오픈 직후 폭주 시나리오: 이벤트 2(SECTION_SELECT) 대상"""
+#
+#     host = "http://localhost:8082"
+#     wait_time = between(0, 0.05)
+#     weight = 1
+#
+#     @task
+#     def enqueue(self):
+#         if stop_if_limit(self):
+#             return
+#         with self.client.post(
+#             "/api/v1/reservations",
+#             json={
+#                 "userId": next_user_id(),
+#                 "eventId": SECTION_SELECT_EVENT_ID,
+#                 "section": random.choice(SECTIONS),
+#             },
+#             name="POST /reservations [burst]",
+#             catch_response=True,
+#         ) as response:
+#             is_business_error(response)

@@ -78,7 +78,7 @@ class ReservationControllerTest {
         @DisplayName("이벤트가 열리지 않았으면 EVENT_NOT_OPEN 에러를 반환한다")
         fun enqueueEventNotOpen() {
             `when`(queueService.enqueue(anyString(), anyLong(), anyLong(), eq(null)))
-                .thenThrow(ServerException(message = "Event is not open for reservations", code = "EVENT_NOT_OPEN"))
+                .thenThrow(ServerException(message = "이벤트가 예약 가능한 상태가 아닙니다", code = "EVENT_NOT_OPEN"))
 
             mockMvc.perform(
                 post("/api/v1/reservations")
@@ -94,7 +94,7 @@ class ReservationControllerTest {
         @DisplayName("잔여석이 없으면 에러를 반환한다")
         fun enqueueNoRemainingSeats() {
             `when`(queueService.enqueue(anyString(), anyLong(), anyLong(), eq(null)))
-                .thenThrow(ServerException(message = "No remaining seats", code = "NO_REMAINING_SEATS"))
+                .thenThrow(ServerException(message = "잔여 좌석이 없습니다", code = "NO_REMAINING_SEATS"))
 
             mockMvc.perform(
                 post("/api/v1/reservations")
@@ -110,7 +110,7 @@ class ReservationControllerTest {
         @DisplayName("이미 대기열에 있는 유저는 ALREADY_IN_QUEUE 에러를 반환한다")
         fun enqueueAlreadyInQueue() {
             `when`(queueService.enqueue(anyString(), anyLong(), anyLong(), eq(null)))
-                .thenThrow(ServerException(message = "Already in queue", code = "ALREADY_IN_QUEUE"))
+                .thenThrow(ServerException(message = "이미 대기열에 등록되어 있습니다", code = "ALREADY_IN_QUEUE"))
 
             mockMvc.perform(
                 post("/api/v1/reservations")
@@ -175,7 +175,7 @@ class ReservationControllerTest {
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.status").value("success"))
                 .andExpect(jsonPath("$.data").value("1"))
-                .andExpect(jsonPath("$.message").value("Cancelled"))
+                .andExpect(jsonPath("$.message").value("취소되었습니다"))
         }
 
         @Test

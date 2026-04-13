@@ -21,11 +21,11 @@ class ReservationController(
     @PostMapping
     fun enqueue(@RequestBody request: ReservationRequest): ApiResponse<EnqueueResponse> {
         if (request.seatId == null && request.section == null) {
-            throw ServerException(message = "Either seatId or section must be provided", code = ErrorCode.INVALID_REQUEST)
+            throw ServerException(message = "좌석 ID 또는 구역을 입력해야 합니다", code = ErrorCode.INVALID_REQUEST)
         }
 
         if (request.section != null && (request.section.length != 1 || request.section[0] !in 'A'..'Z')) {
-            throw ServerException(message = "Invalid section: must be A-Z", code = ErrorCode.INVALID_SECTION)
+            throw ServerException(message = "유효하지 않은 구역입니다: A-Z 한 글자여야 합니다", code = ErrorCode.INVALID_SECTION)
         }
 
         if (request.seatId != null) {
@@ -37,7 +37,7 @@ class ReservationController(
         val position = reserveService.getPosition(request.eventId, request.userId)
         return ApiResponse.success(
             data = EnqueueResponse(userId = request.userId, position = position),
-            message = "Reservation request queued"
+            message = "예약 요청이 대기열에 추가되었습니다"
         )
     }
 
@@ -45,8 +45,8 @@ class ReservationController(
     fun cancel(@PathVariable eventId: Long, @PathVariable userId: String): ApiResponse<String> {
         val cancelled = reserveService.cancel(eventId, userId)
         if (!cancelled) {
-            throw ServerException(message = "User not found in queue", code = ErrorCode.QUEUE_NOT_FOUND)
+            throw ServerException(message = "대기열에 해당 유저가 없습니다", code = ErrorCode.QUEUE_NOT_FOUND)
         }
-        return ApiResponse.success(data = userId, message = "Cancelled")
+        return ApiResponse.success(data = userId, message = "취소되었습니다")
     }
 }

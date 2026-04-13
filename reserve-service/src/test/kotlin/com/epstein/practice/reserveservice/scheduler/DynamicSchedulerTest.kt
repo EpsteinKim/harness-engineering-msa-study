@@ -82,7 +82,7 @@ class DynamicSchedulerTest {
             `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, section = "A"))
             `when`(seatService.reserveBySection(1L, "A", 1L))
-                .thenReturn(ReservationResult(1L, 1L, 5L, true, "Reservation successful", "A"))
+                .thenReturn(ReservationResult(1L, 1L, 5L, true, "reservation successful", "A"))
             `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
 
             capturedRunnable.run()
@@ -100,7 +100,7 @@ class DynamicSchedulerTest {
             `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, seatId = 10L))
             `when`(seatService.reserveBySeatId(1L, 10L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 10L, true, "Reservation successful", "A"))
+                .thenReturn(ReservationResult(1L, 1L, 10L, true, "reservation successful", "A"))
             `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
 
             capturedRunnable.run()
@@ -118,7 +118,7 @@ class DynamicSchedulerTest {
             `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, seatId = 10L))
             `when`(seatService.reserveBySeatId(1L, 10L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 10L, false, "Seat already reserved"))
+                .thenReturn(ReservationResult(1L, 1L, 10L, false, "seat already reserved"))
 
             capturedRunnable.run()
 
@@ -171,9 +171,9 @@ class DynamicSchedulerTest {
             `when`(queueService.getRequestData(1L, "3"))
                 .thenReturn(null)
             `when`(seatService.reserveBySection(1L, "A", 1L))
-                .thenReturn(ReservationResult(1L, 1L, 5L, true, "Reservation successful", "A"))
+                .thenReturn(ReservationResult(1L, 1L, 5L, true, "reservation successful", "A"))
             `when`(seatService.reserveBySeatId(1L, 20L, 2L))
-                .thenReturn(ReservationResult(2L, 1L, 20L, false, "Seat already reserved"))
+                .thenReturn(ReservationResult(2L, 1L, 20L, false, "seat already reserved"))
             `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
 
             capturedRunnable.run()
@@ -184,14 +184,20 @@ class DynamicSchedulerTest {
         }
 
         @Test
-        @DisplayName("잔여석이 없으면 처리 중단")
-        fun noRemainingSeatsStopsProcessing() {
-            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+        @DisplayName("잔여석이 없으면 waiting queue 전체를 정리하고 스케줄러 중단")
+        fun noRemainingSeatsClearsQueueAndStops() {
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1", "2"))
             `when`(eventCache.getRemainingSeats(1L)).thenReturn(0L)
+            `when`(queueCache.peekQueue(1L, Long.MAX_VALUE)).thenReturn(setOf("1", "2", "3"))
 
             capturedRunnable.run()
 
             verify(queueService, never()).getRequestData(anyLong(), anyString())
+            verify(queueService).removeFromWaiting(1L, "1")
+            verify(queueService).removeFromWaiting(1L, "2")
+            verify(queueService).removeFromWaiting(1L, "3")
+            verify(scheduledFuture).cancel(false)
+            assertFalse(scheduler.isProcessing(1L))
         }
 
         @Test
@@ -203,16 +209,69 @@ class DynamicSchedulerTest {
             `when`(queueService.getRequestData(1L, "1"))
                 .thenReturn(RequestData(eventId = 1L, seatId = 10L))
             `when`(seatService.reserveBySeatId(1L, 10L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 10L, true, "Reservation successful", "A"))
+                .thenReturn(ReservationResult(1L, 1L, 10L, true, "reservation successful", "A"))
             `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SEAT_PICK")
 
             capturedRunnable.run()
 
             verify(eventCache).markSeatReserved(1L, 10L)
+            verify(eventCache, never()).releaseHold(anyLong(), anyLong(), anyString())
         }
 
         @Test
-        @DisplayName("처리 전 대기열에서 제거된 유저는 건너뛴다")
+        @DisplayName("SEAT_PICK 예약 실패 시 releaseHold로 HOLD를 복원한다")
+        fun seatPickReservationFailureReleasesHold() {
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
+                .thenReturn(RequestData(eventId = 1L, seatId = 10L))
+            `when`(seatService.reserveBySeatId(1L, 10L, 1L))
+                .thenReturn(ReservationResult(1L, 1L, 10L, false, "seat already reserved"))
+
+            capturedRunnable.run()
+
+            verify(eventCache).releaseHold(1L, 10L, "1")
+            verify(eventCache, never()).markSeatReserved(anyLong(), anyLong())
+        }
+
+        @Test
+        @DisplayName("SEAT_PICK 예약 중 낙관적 락 충돌 시 releaseHold + removeFromWaiting")
+        fun seatPickOptimisticLockConflict() {
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
+                .thenReturn(RequestData(eventId = 1L, seatId = 10L))
+            `when`(seatService.reserveBySeatId(1L, 10L, 1L))
+                .thenThrow(org.springframework.orm.ObjectOptimisticLockingFailureException("Seat", 10L))
+
+            capturedRunnable.run()
+
+            verify(eventCache).releaseHold(1L, 10L, "1")
+            verify(queueService).removeFromWaiting(1L, "1")
+            verify(eventCache, never()).markSeatReserved(anyLong(), anyLong())
+            verify(eventCache, never()).adjustSeatCounts(anyLong(), anyLong(), anyString())
+        }
+
+        @Test
+        @DisplayName("SECTION_SELECT 예약 실패 시에는 releaseHold가 호출되지 않는다")
+        fun sectionSelectReservationFailureDoesNotReleaseHold() {
+            `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
+            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
+            `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+            `when`(queueService.getRequestData(1L, "1"))
+                .thenReturn(RequestData(eventId = 1L, section = "A"))
+            `when`(seatService.reserveBySection(1L, "A", 1L))
+                .thenReturn(ReservationResult(1L, 1L, 0L, false, "no available seat in section A"))
+
+            capturedRunnable.run()
+
+            verify(eventCache, never()).releaseHold(anyLong(), anyLong(), anyString())
+        }
+
+        @Test
+        @DisplayName("처리 전 대기열에서 제거된 유저는 metadata 정리 후 건너뛴다")
         fun userRemovedFromQueueBeforeProcessing() {
             `when`(queueService.peekWaiting(1L, 10L)).thenReturn(setOf("1"))
             `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
@@ -221,6 +280,7 @@ class DynamicSchedulerTest {
             capturedRunnable.run()
 
             verify(queueService, never()).getRequestData(anyLong(), anyString())
+            verify(queueService).removeFromWaiting(1L, "1")
         }
     }
 
