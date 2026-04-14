@@ -40,6 +40,7 @@
 | gateway | **운영중** | 8080 / 8080 | 라우팅, 단일 진입점 | Spring Cloud Gateway (WebFlux) |
 | reserve-service | **운영중** | 8082 / 8080 | 좌석 예약 + 대기열/스로틀링 (낙관적 락 + SKIP LOCKED) | Spring Boot MVC, JPA, QueryDSL, Redis, Kotlin |
 | user-service | **운영중** | 8081 / 8080 | 사용자 조회/수정 (인증 미도입, 학습 우선) | Spring Boot MVC, JPA, Kotlin |
+| payment-service | **운영중** | 8083 / 8080 | 결제 처리 (학습용 랜덤 성공/실패) | Spring Boot MVC, JPA, Kotlin |
 | redis | **운영중** | 6379 / 6379 | reserve-service 대기열 상태 관리 | Redis 7 Alpine |
 
 ---
@@ -52,7 +53,9 @@
 |------|------------|
 | `/api/v1/reservations/**` | reserve-service |
 | `/api/v1/reservations/seats/**` | reserve-service (좌석 맵/구역 잔여석) |
+| `/api/v1/reservations/pay` | reserve-service (Saga 오케스트레이터) |
 | `/api/v1/users/**` | user-service |
+| `/api/v1/payments/**` | payment-service |
 
 ### 환경별 라우팅
 
@@ -67,7 +70,9 @@
 
 - **프로토콜**: REST (JSON)
 - **외부 → 내부**: Gateway를 통한 HTTP 라우팅
-- **서비스 간 통신**: reserve-service → user-service (RestClient, enqueue 시 `GET /api/v1/users/{id}`로 userId 검증)
+- **서비스 간 통신**:
+  - reserve-service → user-service (RestClient, enqueue 시 `GET /api/v1/users/{id}`로 userId 검증)
+  - reserve-service → payment-service (RestClient, `POST /pay` Saga step, 성공/실패에 따라 Seat 상태 확정 or 보상)
 - **응답 표준**: `ApiResponse<T>` (common 모듈에서 공유)
   ```json
   { "status": "success|error", "data": {}, "message": "", "code": "" }
@@ -85,9 +90,11 @@
 7. isInQueue 재확인 → 예약 실행:
    - SECTION_SELECT: reserveBySection() (FOR UPDATE SKIP LOCKED)
    - SEAT_PICK: reserveBySeatId() (낙관적 락) → 성공 시 markSeatReserved
-8. 성공 시 → 큐에서 제거, Redis 캐시 갱신 (remainingSeats, 구역별 available, 좌석 상태)
+8. 성공 시 → 큐에서 제거, Seat.status = PAYMENT_PENDING, Redis 캐시 갱신 (remainingSeats, 구역별 available, 좌석 상태는 RESERVED 마킹)
 9. 실패/낙관적 락 충돌 시 → SEAT_PICK이면 releaseHold, 큐에서 제거
-10. 잔여석 0 또는 이벤트 종료 시 → 큐 정리 + 스케줄러 중단 (cancel로 잔여석 복구되면 재시작)
+10. 잔여석 0 또는 이벤트 종료 시 → 큐 정리 + 스케줄러 중단 (cancel/결제실패로 잔여석 복구되면 재시작)
+11. 유저가 POST /reservations/pay 호출 → PaymentOrchestrator (Saga)
+    → payment-service 호출 → 성공: Seat.status=RESERVED / 실패: Seat.status=AVAILABLE + adjustSeatCounts(+1) + markSeatAvailable + scheduler.startProcessing
 ```
 
 ### 비동기 (계획)
@@ -121,7 +128,7 @@ seats  (id, event_id FK, seat_number, section, status, reserved_by, reserved_at,
 
 - `seats.section`: 구역 (A~Z), VARCHAR(1)
 - `seats.version`: 낙관적 락 (@Version) — 동시 예약 충돌 방지
-- `seats.status`: AVAILABLE | RESERVED
+- `seats.status`: AVAILABLE | PAYMENT_PENDING | RESERVED
 - 인덱스: `idx_seats_event_section(event_id, section)`, `idx_seats_event_status(event_id, status)`
 
 ### Redis 구조 (reserve-service)
@@ -149,11 +156,23 @@ user_account (id BIGSERIAL PK, email VARCHAR(255) UNIQUE, name VARCHAR(100), pas
 - 학습용으로 password는 plain text, 인증 미도입
 - 시드 데이터: 한국식 이름 10,000명 (`db/seed.sql`)
 
+### DB 스키마 (payment-service)
+
+```sql
+payment (id BIGSERIAL PK, seat_id BIGINT, user_id BIGINT, event_id BIGINT,
+         amount BIGINT, method VARCHAR(20), status VARCHAR(20),
+         created_at TIMESTAMP, completed_at TIMESTAMP)
+```
+
+- `status`: PENDING | SUCCEEDED | FAILED
+- 인덱스: `(user_id, status)`, `(seat_id, status)`
+- 학습용 설정: `payment.success-rate` (기본 0.7)
+
 ### DB 연결
 
 - **드라이버**: JDBC (JPA/Hibernate) — reserve-service, user-service
 - **접속 정보**: `.env` 파일로 관리 (gitignore 처리됨)
-- **환경변수** (서비스별 분리): `RESERVE_DB_URL/USERNAME/PASSWORD`, `USER_DB_URL/USERNAME/PASSWORD`
+- **환경변수** (서비스별 분리): `RESERVE_DB_URL/USERNAME/PASSWORD`, `USER_DB_URL/USERNAME/PASSWORD`, `PAYMENT_DB_URL/USERNAME/PASSWORD`
 
 ---
 
@@ -243,3 +262,4 @@ harness-back/
 | 2026-04-10 | v7.0.0 | 에러 처리 통일(ServerException+ErrorCode), API 통합(enqueue 1개, cancel에 eventId), metadata 키 이벤트별 분리, 스케줄러 안정성 강화, 부하테스트 구축 | - |
 | 2026-04-12 | v8.0.0 | SEAT_PICK HOLD(Lua 원자성, lazy expiry), SECTION_FULL 거부, 좌석 맵 조회 API, 스케줄러 ScheduledFuture 관리 + 잔여석 0 시 큐 정리, GlobalExceptionHandler scanBasePackages 수정 | - |
 | 2026-04-13 | v9.0.0 | user-service 기본 기능(read/update + 한국식 이름 10,000명 시드), reserve→user RestClient 인터서비스 호출(USER_NOT_FOUND), DB 환경변수 서비스별 분리 | - |
+| 2026-04-14 | v10.0.0 | payment-service 신설 + Saga 오케스트레이션 MVP: Seat에 PAYMENT_PENDING 상태 추가, POST /reservations/pay → payment-service 동기 호출, 실패 시 좌석 AVAILABLE 복구 + 스케줄러 재시작 보상 | - |

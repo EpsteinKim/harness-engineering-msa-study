@@ -60,7 +60,7 @@ class SeatServiceTest {
             assertEquals(1L, result.userId)
             assertEquals(10L, result.seatId)
             assertEquals("A", result.section)
-            assertEquals(SeatStatus.RESERVED, availableSeat.status)
+            assertEquals(SeatStatus.PAYMENT_PENDING, availableSeat.status)
             assertEquals(1L, availableSeat.userId)
         }
 
@@ -108,7 +108,7 @@ class SeatServiceTest {
             assertEquals("seat A-1 reserved", result.message)
             assertEquals(10L, result.seatId)
             assertEquals("A", result.section)
-            assertEquals(SeatStatus.RESERVED, availableSeat.status)
+            assertEquals(SeatStatus.PAYMENT_PENDING, availableSeat.status)
             assertEquals(1L, availableSeat.userId)
         }
 

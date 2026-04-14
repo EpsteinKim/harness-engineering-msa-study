@@ -12,4 +12,9 @@ class RestClientConfig {
     fun userServiceClient(
         @Value("\${user-service.base-url}") baseUrl: String
     ): RestClient = RestClient.builder().baseUrl(baseUrl).build()
+
+    @Bean
+    fun paymentServiceClient(
+        @Value("\${payment-service.base-url}") baseUrl: String
+    ): RestClient = RestClient.builder().baseUrl(baseUrl).build()
 }

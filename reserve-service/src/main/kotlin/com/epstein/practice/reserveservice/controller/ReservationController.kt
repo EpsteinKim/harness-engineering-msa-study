@@ -4,7 +4,10 @@ import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.common.response.ApiResponse
 import com.epstein.practice.reserveservice.constant.ErrorCode
 import com.epstein.practice.reserveservice.dto.EnqueueResponse
+import com.epstein.practice.reserveservice.dto.PaymentRequest
 import com.epstein.practice.reserveservice.dto.ReservationRequest
+import com.epstein.practice.reserveservice.service.PaymentOrchestrationResult
+import com.epstein.practice.reserveservice.service.PaymentOrchestrator
 import com.epstein.practice.reserveservice.service.ReservationService
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -16,7 +19,8 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/api/v1/reservations")
 class ReservationController(
-    private val reserveService: ReservationService
+    private val reserveService: ReservationService,
+    private val paymentOrchestrator: PaymentOrchestrator
 ) {
     @PostMapping
     fun enqueue(@RequestBody request: ReservationRequest): ApiResponse<EnqueueResponse> {
@@ -48,5 +52,16 @@ class ReservationController(
             throw ServerException(message = "대기열에 해당 유저가 없습니다", code = ErrorCode.QUEUE_NOT_FOUND)
         }
         return ApiResponse.success(data = userId, message = "취소되었습니다")
+    }
+
+    @PostMapping("/pay")
+    fun pay(@RequestBody request: PaymentRequest): ApiResponse<PaymentOrchestrationResult> {
+        val result = paymentOrchestrator.pay(
+            eventId = request.eventId,
+            userId = request.userId,
+            amount = request.amount,
+            method = request.method
+        )
+        return ApiResponse.success(data = result, message = result.message)
     }
 }

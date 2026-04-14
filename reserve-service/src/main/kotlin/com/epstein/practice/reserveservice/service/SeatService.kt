@@ -26,7 +26,7 @@ class SeatService(
             return ReservationResult(userId, eventId, seatId, false, "seat already reserved")
         }
 
-        seat.status = SeatStatus.RESERVED
+        seat.status = SeatStatus.PAYMENT_PENDING
         seat.userId = userId
         seat.reservedAt = LocalDateTime.now()
         seatRepository.save(seat)
@@ -39,7 +39,7 @@ class SeatService(
         val seat = seatRepository.findFirstAvailableSeatForUpdate(eventId, section)
             ?: return ReservationResult(userId, eventId, 0, false, "no available seat in section $section")
 
-        seat.status = SeatStatus.RESERVED
+        seat.status = SeatStatus.PAYMENT_PENDING
         seat.userId = userId
         seat.reservedAt = LocalDateTime.now()
         seatRepository.save(seat)
