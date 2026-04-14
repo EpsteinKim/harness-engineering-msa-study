@@ -98,6 +98,14 @@ class EventCacheRepository(
         }
     }
 
+    fun markSeatAvailable(eventId: Long, seatId: Long) {
+        val current = getSeatStatus(eventId, seatId) ?: return
+        val parts = current.split(":")
+        if (parts.size >= 3) {
+            hashOps.put(seatCacheKey(eventId), seatId.toString(), "${parts[0]}:${parts[1]}:AVAILABLE")
+        }
+    }
+
     fun tryHoldSeat(eventId: Long, seatId: Long, userId: String, nowMs: Long, ttlMs: Long): Boolean {
         val result = redis.execute(
             tryHoldScript,

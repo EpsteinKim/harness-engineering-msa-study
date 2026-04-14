@@ -32,4 +32,5 @@ interface SeatRepository : JpaRepository<Seat, Long> {
     fun countAvailableSeats(@Param("eventId") eventId: Long): Long
 
     fun findByEventIdAndUserId(eventId: Long, userId: Long): Seat?
+    fun findByEventIdAndUserIdAndStatus(eventId: Long, userId: Long, status: com.epstein.practice.reserveservice.entity.SeatStatus): Seat?
 }

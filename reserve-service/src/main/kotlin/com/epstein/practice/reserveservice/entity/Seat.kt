@@ -39,5 +39,6 @@ class Seat(
 
 enum class SeatStatus {
     AVAILABLE,
+    PAYMENT_PENDING,
     RESERVED
 }

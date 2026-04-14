@@ -16,6 +16,8 @@ object ErrorCode {
     const val ALREADY_IN_QUEUE = "ALREADY_IN_QUEUE"
     const val QUEUE_NOT_FOUND = "QUEUE_NOT_FOUND"
     const val USER_NOT_FOUND = "USER_NOT_FOUND"
+    const val PAYMENT_PENDING_NOT_FOUND = "PAYMENT_PENDING_NOT_FOUND"
+    const val PAYMENT_FAILED = "PAYMENT_FAILED"
 }
 
 object SeatCacheStatus {

@@ -43,4 +43,6 @@ out/
 
 ### Environment ###
 .env
-**/application-local.properties
+**/database.properties
+# .sample은 커밋 대상
+!**/database.properties.sample
