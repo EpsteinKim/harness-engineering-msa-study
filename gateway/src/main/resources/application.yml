@@ -24,6 +24,39 @@ spring:
               predicates:
                 - Path=/api/v1/payments/**
 
+            # Swagger 통합 — 각 서비스의 /v3/api-docs를 gateway 경로에 노출
+            - id: reserve-docs
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api-docs/reserve
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: user-docs
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api-docs/user
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: payment-docs
+              uri: http://localhost:8083
+              predicates:
+                - Path=/api-docs/payment
+              filters:
+                - SetPath=/v3/api-docs
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: reserve-service
+        url: /api-docs/reserve
+      - name: user-service
+        url: /api-docs/user
+      - name: payment-service
+        url: /api-docs/payment
+
 ---
 spring:
   config:
@@ -48,3 +81,24 @@ spring:
               uri: http://payment-service:8080
               predicates:
                 - Path=/api/v1/payments/**
+
+            - id: reserve-docs
+              uri: http://reserve-service:8080
+              predicates:
+                - Path=/api-docs/reserve
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: user-docs
+              uri: http://user-service:8080
+              predicates:
+                - Path=/api-docs/user
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: payment-docs
+              uri: http://payment-service:8080
+              predicates:
+                - Path=/api-docs/payment
+              filters:
+                - SetPath=/v3/api-docs

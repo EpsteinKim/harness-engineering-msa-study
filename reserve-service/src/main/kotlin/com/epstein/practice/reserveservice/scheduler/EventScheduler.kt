@@ -1,6 +1,6 @@
 package com.epstein.practice.reserveservice.scheduler
 
-import com.epstein.practice.reserveservice.service.EventService
+import com.epstein.practice.reserveservice.service.EventLifecycleService
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component
 
 @Component
 class EventScheduler(
-    private val eventService: EventService
+    private val eventService: EventLifecycleService
 ) {
     private val logger = LoggerFactory.getLogger(EventScheduler::class.java)
 

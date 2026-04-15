@@ -3,6 +3,7 @@ package com.epstein.practice.reserveservice.service
 import com.epstein.practice.reserveservice.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.constant.parseSeatValue
 import com.epstein.practice.reserveservice.constant.sectionAvailableField
+import com.epstein.practice.reserveservice.constant.sectionPriceField
 import com.epstein.practice.reserveservice.constant.sectionTotalField
 import com.epstein.practice.reserveservice.dto.SeatMapEntry
 import com.epstein.practice.reserveservice.dto.SectionAvailabilityResponse
@@ -63,6 +64,7 @@ class SeatService(
     fun getSeatMap(eventId: Long, section: String? = null): List<SeatMapEntry> {
         val raw = eventCache.getAllSeatFields(eventId)
         if (raw.isEmpty()) return emptyList()
+        val priceMap = eventCache.getAllSeatPrices(eventId)
         val now = System.currentTimeMillis()
         val entries = mutableListOf<SeatMapEntry>()
         for ((key, value) in raw) {
@@ -74,7 +76,8 @@ class SeatService(
                     seatId = seatId,
                     section = parsed.section,
                     seatNumber = parsed.num,
-                    status = parsed.effectiveStatus(now)
+                    status = parsed.effectiveStatus(now),
+                    priceAmount = priceMap[seatId] ?: 0
                 )
             )
         }
@@ -93,7 +96,8 @@ class SeatService(
             SectionAvailabilityResponse(
                 section = section,
                 availableCount = allFields[sectionAvailableField(section)]?.toLongOrNull() ?: 0,
-                totalCount = allFields[sectionTotalField(section)]?.toLongOrNull() ?: 0
+                totalCount = allFields[sectionTotalField(section)]?.toLongOrNull() ?: 0,
+                priceAmount = allFields[sectionPriceField(section)]?.toLongOrNull() ?: 0
             )
         }.sortedBy { it.section }
     }

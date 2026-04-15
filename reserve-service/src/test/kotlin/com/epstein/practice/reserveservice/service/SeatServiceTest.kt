@@ -169,8 +169,10 @@ class SeatServiceTest {
                 "remainingSeats" to "50",
                 "section:A:available" to "25",
                 "section:A:total" to "30",
+                "section:A:price" to "200000",
                 "section:B:available" to "20",
-                "section:B:total" to "30"
+                "section:B:total" to "30",
+                "section:B:price" to "150000"
             ))
 
             val result = seatService.getSectionAvailability(1L)
@@ -179,6 +181,8 @@ class SeatServiceTest {
             assertEquals("A", result[0].section)
             assertEquals(25L, result[0].availableCount)
             assertEquals(30L, result[0].totalCount)
+            assertEquals(200000L, result[0].priceAmount)
+            assertEquals(150000L, result[1].priceAmount)
         }
 
         @Test
@@ -225,7 +229,22 @@ class SeatServiceTest {
         }
 
         @Test
-        @DisplayName("응답 DTO는 seatId/section/seatNumber/status만 노출한다")
+        @DisplayName("좌석별 가격 캐시값이 응답에 포함된다")
+        fun seatPriceIncluded() {
+            `when`(eventCache.getAllSeatFields(1L)).thenReturn(
+                mapOf("10" to "A:A-1:AVAILABLE", "20" to "B:B-1:AVAILABLE")
+            )
+            `when`(eventCache.getAllSeatPrices(1L)).thenReturn(mapOf(10L to 200000L, 20L to 150000L))
+
+            val result = seatService.getSeatMap(1L, null)
+
+            assertEquals(2, result.size)
+            assertEquals(200000L, result.first { it.seatId == 10L }.priceAmount)
+            assertEquals(150000L, result.first { it.seatId == 20L }.priceAmount)
+        }
+
+        @Test
+        @DisplayName("응답 DTO는 seatId/section/seatNumber/status/priceAmount만 노출한다")
         fun responseExposesOnlySafeFields() {
             val futureMs = System.currentTimeMillis() + 60_000L
             `when`(eventCache.getAllSeatFields(1L)).thenReturn(
@@ -235,7 +254,7 @@ class SeatServiceTest {
             val entry = seatService.getSeatMap(1L, null)[0]
             val fieldNames = entry.javaClass.declaredFields.map { it.name }.toSet()
 
-            assertEquals(setOf("seatId", "section", "seatNumber", "status"), fieldNames)
+            assertEquals(setOf("seatId", "section", "seatNumber", "status", "priceAmount"), fieldNames)
         }
 
         @Test

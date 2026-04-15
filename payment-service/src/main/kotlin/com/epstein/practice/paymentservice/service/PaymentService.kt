@@ -53,4 +53,7 @@ class PaymentService(
         paymentRepository.findById(id).orElseThrow {
             ServerException(message = "결제 정보를 찾을 수 없습니다", code = ErrorCode.PAYMENT_NOT_FOUND)
         }
+
+    fun getByUserId(userId: Long): List<Payment> =
+        paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)
 }

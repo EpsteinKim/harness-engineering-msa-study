@@ -59,7 +59,6 @@ class ReservationController(
         val result = paymentOrchestrator.pay(
             eventId = request.eventId,
             userId = request.userId,
-            amount = request.amount,
             method = request.method
         )
         return ApiResponse.success(data = result, message = result.message)

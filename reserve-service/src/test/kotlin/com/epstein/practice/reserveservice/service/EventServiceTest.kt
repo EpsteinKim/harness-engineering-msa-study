@@ -1,293 +1,184 @@
 package com.epstein.practice.reserveservice.service
 
+import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.reserveservice.cache.EventCacheRepository
-import com.epstein.practice.reserveservice.constant.sectionAvailableField
-import com.epstein.practice.reserveservice.dto.SectionAvailabilityResponse
+import com.epstein.practice.reserveservice.client.PaymentClient
+import com.epstein.practice.reserveservice.client.PaymentSummary
 import com.epstein.practice.reserveservice.entity.Event
 import com.epstein.practice.reserveservice.entity.EventStatus
 import com.epstein.practice.reserveservice.entity.Seat
-import com.epstein.practice.reserveservice.entity.SeatSelectionType
 import com.epstein.practice.reserveservice.entity.SeatStatus
 import com.epstein.practice.reserveservice.repository.EventRepository
 import com.epstein.practice.reserveservice.repository.SeatRepository
-import com.epstein.practice.reserveservice.repository.support.SeatQueryRepository
-import com.epstein.practice.reserveservice.scheduler.DynamicScheduler
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.ArgumentMatchers.any
-import org.mockito.ArgumentMatchers.anyLong
-import org.mockito.ArgumentMatchers.anyString
-import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mock
-import org.mockito.Mockito
-import org.mockito.Mockito.`when`
-import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
+import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
 import java.time.LocalDateTime
+import java.util.Optional
 
 @ExtendWith(MockitoExtension::class)
 class EventServiceTest {
 
-    @Mock
-    lateinit var eventRepository: EventRepository
+    @Mock lateinit var eventRepository: EventRepository
+    @Mock lateinit var seatRepository: SeatRepository
+    @Mock lateinit var eventCache: EventCacheRepository
+    @Mock lateinit var paymentClient: PaymentClient
 
-    @Mock
-    lateinit var seatRepository: SeatRepository
+    private lateinit var service: EventService
 
-    @Mock
-    lateinit var seatQueryRepository: SeatQueryRepository
-
-    @Mock
-    lateinit var eventCache: EventCacheRepository
-
-    @Mock
-    lateinit var dynamicScheduler: DynamicScheduler
-
-    private lateinit var eventService: EventService
+    private val event = Event(
+        id = 1L, name = "Concert",
+        eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
+        status = EventStatus.OPEN,
+        ticketOpenTime = LocalDateTime.of(2026, 4, 1, 10, 0),
+        ticketCloseTime = LocalDateTime.of(2026, 4, 30, 23, 59)
+    )
 
     @BeforeEach
     fun setUp() {
-        eventService = EventService(eventRepository, seatRepository, seatQueryRepository, eventCache, dynamicScheduler)
+        service = EventService(eventRepository, seatRepository, eventCache, paymentClient)
     }
 
-    @Nested
-    @DisplayName("openEvents - 이벤트 열기")
-    inner class OpenEvents {
+    @Test
+    @DisplayName("listEvents(OPEN) - Redis ZSET 인덱스 hit 시 DB 조회 없이 캐시로 응답")
+    fun listEventsRedisFirst() {
+        `when`(eventCache.getOpenEventIdsOrderedByTicketOpenTime()).thenReturn(listOf(1L))
+        `when`(eventCache.getAllFields(1L)).thenReturn(mapOf(
+            "id" to "1",
+            "name" to "Concert",
+            "remainingSeats" to "300",
+            "status" to "OPEN",
+            "eventTime" to "2026-05-01T19:00",
+            "ticketOpenTime" to "2026-04-01T10:00",
+            "ticketCloseTime" to "2026-04-30T23:59",
+            "seatSelectionType" to "SEAT_PICK"
+        ))
 
-        @Test
-        @DisplayName("조건에 맞는 이벤트를 OPEN으로 변경하고 캐싱한다")
-        fun opensMatchingEvents() {
-            val event = Event(
-                id = 1L, name = "Concert",
-                eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
-                status = EventStatus.CLOSED,
-                ticketOpenTime = LocalDateTime.of(2026, 4, 1, 10, 0),
-                ticketCloseTime = LocalDateTime.of(2026, 4, 30, 23, 59),
-                seatSelectionType = SeatSelectionType.SECTION_SELECT
-            )
-            Mockito.doReturn(listOf(event)).`when`(eventRepository)
-                .findEventsToOpen(any() ?: EventStatus.CLOSED, any() ?: LocalDateTime.MIN)
-            `when`(seatRepository.countAvailableSeats(1L)).thenReturn(50L)
-            `when`(seatQueryRepository.countAvailableBySection(1L)).thenReturn(listOf(
-                SectionAvailabilityResponse("A", 25L, 30L),
-                SectionAvailabilityResponse("B", 20L, 30L)
-            ))
-            Mockito.doReturn(event).`when`(eventRepository).save(any() ?: event)
+        val result = service.listEvents(EventStatus.OPEN)
 
-            val count = eventService.openEvents()
-
-            assertEquals(1, count)
-            assertEquals(EventStatus.OPEN, event.status)
-            verify(eventCache).saveEvent(eq(1L) ?: 0, any() ?: emptyMap())
-            verify(dynamicScheduler).startProcessing(1L)
-        }
-
-        @Test
-        @DisplayName("SEAT_PICK 이벤트를 OPEN하면 좌석 캐시도 생성한다")
-        fun openEventsSeatPick() {
-            val event = Event(
-                id = 1L, name = "Concert",
-                eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
-                status = EventStatus.CLOSED,
-                ticketOpenTime = LocalDateTime.of(2026, 4, 1, 10, 0),
-                ticketCloseTime = LocalDateTime.of(2026, 4, 30, 23, 59),
-                seatSelectionType = SeatSelectionType.SEAT_PICK
-            )
-            Mockito.doReturn(listOf(event)).`when`(eventRepository)
-                .findEventsToOpen(any() ?: EventStatus.CLOSED, any() ?: LocalDateTime.MIN)
-            `when`(seatRepository.countAvailableSeats(1L)).thenReturn(50L)
-            `when`(seatQueryRepository.countAvailableBySection(1L)).thenReturn(listOf(
-                SectionAvailabilityResponse("A", 25L, 30L)
-            ))
-            Mockito.doReturn(event).`when`(eventRepository).save(any() ?: event)
-
-            val seat1 = Seat(id = 10L, event = event, seatNumber = "A-1", section = "A", status = SeatStatus.AVAILABLE)
-            val seat2 = Seat(id = 11L, event = event, seatNumber = "A-2", section = "A", status = SeatStatus.RESERVED)
-            `when`(seatRepository.findByEventId(1L)).thenReturn(listOf(seat1, seat2))
-
-            val count = eventService.openEvents()
-
-            assertEquals(1, count)
-            verify(eventCache).saveAllSeats(eq(1L) ?: 0, Mockito.argThat<Map<String, String>> { map ->
-                map?.get("10") == "A:A-1:AVAILABLE" && map?.get("11") == "A:A-2:RESERVED"
-            } ?: emptyMap())
-        }
-
-        @Test
-        @DisplayName("조건에 맞는 이벤트가 없으면 0을 반환한다")
-        fun noEventsToOpen() {
-            Mockito.doReturn(emptyList<Event>()).`when`(eventRepository)
-                .findEventsToOpen(any() ?: EventStatus.CLOSED, any() ?: LocalDateTime.MIN)
-
-            assertEquals(0, eventService.openEvents())
-        }
+        assertEquals(1, result.size)
+        assertEquals("Concert", result[0].name)
+        assertEquals(300L, result[0].remainingSeats)
+        verifyNoInteractions(eventRepository)
     }
 
-    @Nested
-    @DisplayName("closeEvents - 이벤트 닫기")
-    inner class CloseEvents {
+    @Test
+    @DisplayName("listEvents(OPEN) - Redis 인덱스 비어있으면 DB fallback")
+    fun listEventsFallbackToDb() {
+        `when`(eventCache.getOpenEventIdsOrderedByTicketOpenTime()).thenReturn(emptyList())
+        `when`(eventRepository.findByStatusOrderByTicketOpenTimeAsc(EventStatus.OPEN)).thenReturn(listOf(event))
+        `when`(eventCache.getRemainingSeats(1L)).thenReturn(300L)
 
-        @Test
-        @DisplayName("종료 시간이 지난 이벤트를 CLOSED로 변경하고 캐시를 삭제한다")
-        fun closesExpiredEvents() {
-            val event = Event(
-                id = 1L, name = "Concert",
-                eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
-                status = EventStatus.OPEN,
-                ticketOpenTime = LocalDateTime.of(2026, 4, 1, 10, 0),
-                ticketCloseTime = LocalDateTime.of(2026, 4, 8, 23, 59)
-            )
-            Mockito.doReturn(listOf(event)).`when`(eventRepository)
-                .findEventsToClose(any() ?: EventStatus.OPEN, any() ?: LocalDateTime.MIN)
-            Mockito.doReturn(event).`when`(eventRepository).save(any() ?: event)
+        val result = service.listEvents(EventStatus.OPEN)
 
-            val count = eventService.closeEvents()
-
-            assertEquals(1, count)
-            assertEquals(EventStatus.CLOSED, event.status)
-            verify(eventCache).deleteEvent(1L)
-            verify(eventCache).deleteSeatCache(1L)
-            verify(dynamicScheduler).stopProcessing(1L)
-        }
+        assertEquals(1, result.size)
+        assertEquals(300L, result[0].remainingSeats)
     }
 
-    @Nested
-    @DisplayName("warmupCache - 시작 시 캐시 워밍업")
-    inner class WarmupCache {
+    @Test
+    @DisplayName("listEvents(CLOSED) - OPEN이 아니면 항상 DB 조회")
+    fun listEventsClosedAlwaysDb() {
+        `when`(eventRepository.findByStatusOrderByTicketOpenTimeAsc(EventStatus.CLOSED)).thenReturn(emptyList())
 
-        @Test
-        @DisplayName("OPEN 이벤트를 캐시에 올리고 스케줄러를 등록한다")
-        fun warmsUpOpenEvents() {
-            val event = Event(
-                id = 1L, name = "Concert",
-                eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
-                status = EventStatus.OPEN,
-                ticketOpenTime = LocalDateTime.of(2026, 4, 1, 10, 0),
-                ticketCloseTime = LocalDateTime.of(2026, 4, 30, 23, 59)
-            )
-            `when`(eventRepository.findByStatus(EventStatus.OPEN)).thenReturn(listOf(event))
-            `when`(seatRepository.countAvailableSeats(1L)).thenReturn(50L)
-            `when`(seatQueryRepository.countAvailableBySection(1L)).thenReturn(listOf(
-                SectionAvailabilityResponse("A", 25L, 30L)
-            ))
+        service.listEvents(EventStatus.CLOSED)
 
-            val count = eventService.warmupCache()
-
-            assertEquals(1, count)
-            verify(eventCache).saveEvent(eq(1L) ?: 0, any() ?: emptyMap())
-            verify(dynamicScheduler).startProcessing(1L)
-        }
-
-        @Test
-        @DisplayName("OPEN 이벤트가 없으면 0을 반환한다")
-        fun noOpenEvents() {
-            `when`(eventRepository.findByStatus(EventStatus.OPEN)).thenReturn(emptyList())
-
-            assertEquals(0, eventService.warmupCache())
-            verify(eventCache, never()).saveEvent(anyLong(), any() ?: emptyMap())
-        }
+        verify(eventCache, never()).getOpenEventIdsOrderedByTicketOpenTime()
     }
 
-    @Nested
-    @DisplayName("isEventOpen - 이벤트 열림 여부 확인")
-    inner class IsEventOpen {
+    @Test
+    @DisplayName("getEvent - 캐시 hit 시 DB 조회 없이 응답")
+    fun getEventCacheHit() {
+        `when`(eventCache.getAllFields(1L)).thenReturn(mapOf(
+            "id" to "1",
+            "name" to "Concert",
+            "remainingSeats" to "200",
+            "status" to "OPEN",
+            "eventTime" to "2026-05-01T19:00",
+            "seatSelectionType" to "SEAT_PICK"
+        ))
 
-        @Test
-        @DisplayName("캐시에 있으면 true를 반환한다")
-        fun eventIsOpen() {
-            `when`(eventCache.exists(1L)).thenReturn(true)
-            assertTrue(eventService.isEventOpen(1L))
-        }
+        val result = service.getEvent(1L)
 
-        @Test
-        @DisplayName("캐시에 없으면 false를 반환한다")
-        fun eventIsNotOpen() {
-            `when`(eventCache.exists(1L)).thenReturn(false)
-            assertFalse(eventService.isEventOpen(1L))
-        }
+        assertEquals(1L, result.id)
+        assertEquals(200L, result.remainingSeats)
+        verifyNoInteractions(eventRepository)
     }
 
-    @Nested
-    @DisplayName("syncAllRemainingSeats - 잔여 좌석 동기화")
-    inner class SyncAllRemainingSeats {
+    @Test
+    @DisplayName("getEvent - 캐시 miss 시 DB fallback")
+    fun getEventCacheMissDbFallback() {
+        `when`(eventCache.getAllFields(1L)).thenReturn(emptyMap())
+        `when`(eventRepository.findById(1L)).thenReturn(Optional.of(event))
+        `when`(eventCache.getRemainingSeats(1L)).thenReturn(200L)
 
-        @Test
-        @DisplayName("OPEN 이벤트의 잔여 좌석 수를 캐시에 동기화한다")
-        fun syncsRemainingSeatsForOpenEvents() {
-            val event = Event(
-                id = 1L, name = "Concert",
-                eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
-                status = EventStatus.OPEN
-            )
-            `when`(eventRepository.findByStatus(EventStatus.OPEN)).thenReturn(listOf(event))
-            `when`(seatRepository.countAvailableSeats(1L)).thenReturn(42L)
-            `when`(seatQueryRepository.countAvailableBySection(1L)).thenReturn(listOf(
-                SectionAvailabilityResponse("A", 25L, 30L),
-                SectionAvailabilityResponse("B", 17L, 30L)
-            ))
+        val result = service.getEvent(1L)
 
-            val count = eventService.syncAllRemainingSeats()
+        assertEquals(1L, result.id)
+        assertEquals(200L, result.remainingSeats)
+    }
 
-            assertEquals(1, count)
-            verify(eventCache).setField(1L, "remainingSeats", "42")
-            verify(eventCache).setField(1L, sectionAvailableField("A"), "25")
-            verify(eventCache).setField(1L, sectionAvailableField("B"), "17")
-            verify(dynamicScheduler).stopProcessing(1L)
-            verify(dynamicScheduler).startProcessing(1L)
-        }
+    @Test
+    @DisplayName("getEvent - 캐시와 DB 모두 없으면 ServerException")
+    fun getEventNotFound() {
+        `when`(eventCache.getAllFields(999L)).thenReturn(emptyMap())
+        `when`(eventRepository.findById(999L)).thenReturn(Optional.empty())
+        assertThrows(ServerException::class.java) { service.getEvent(999L) }
+    }
 
-        @Test
-        @DisplayName("SEAT_PICK 이벤트 동기화 시 좌석 캐시를 다시 생성한다")
-        fun syncSeatPickRebuildsSeatCache() {
-            val event = Event(
-                id = 1L, name = "Concert",
-                eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
-                status = EventStatus.OPEN,
-                seatSelectionType = SeatSelectionType.SEAT_PICK
-            )
-            `when`(eventRepository.findByStatus(EventStatus.OPEN)).thenReturn(listOf(event))
-            `when`(seatRepository.countAvailableSeats(1L)).thenReturn(42L)
-            `when`(seatQueryRepository.countAvailableBySection(1L)).thenReturn(listOf(
-                SectionAvailabilityResponse("A", 25L, 30L)
-            ))
-            val seat1 = Seat(id = 10L, event = event, seatNumber = "A-1", section = "A", status = SeatStatus.AVAILABLE)
-            val seat2 = Seat(id = 11L, event = event, seatNumber = "A-2", section = "A", status = SeatStatus.RESERVED)
-            `when`(seatRepository.findByEventId(1L)).thenReturn(listOf(seat1, seat2))
+    @Test
+    @DisplayName("getMyReservations - 좌석과 결제 정보 조합해 반환")
+    fun getMyReservationsWithPayment() {
+        val seat = Seat(
+            id = 10L, event = event, seatNumber = "A-1", section = "A",
+            status = SeatStatus.RESERVED, userId = 1L, priceAmount = 200000L,
+            reservedAt = LocalDateTime.of(2026, 4, 10, 9, 0)
+        )
+        `when`(seatRepository.findActiveByUserId(1L)).thenReturn(listOf(seat))
+        `when`(paymentClient.listByUser(1L)).thenReturn(
+            listOf(PaymentSummary(id = 100L, seatId = 10L, status = "SUCCEEDED"))
+        )
 
-            eventService.syncAllRemainingSeats()
+        val result = service.getMyReservations(1L)
 
-            verify(eventCache).saveAllSeats(eq(1L) ?: 0, Mockito.argThat<Map<String, String>> { map ->
-                map?.get("10") == "A:A-1:AVAILABLE" && map?.get("11") == "A:A-2:RESERVED"
-            } ?: emptyMap())
-        }
+        assertEquals(1, result.size)
+        assertEquals(10L, result[0].seatId)
+        assertEquals(100L, result[0].paymentId)
+        assertEquals("SUCCEEDED", result[0].paymentStatus)
+        assertEquals(200000L, result[0].priceAmount)
+    }
 
-        @Test
-        @DisplayName("동기화 시 stop → sync → start 순서로 처리한다")
-        fun syncStopsAndRestartsProcessingPerEvent() {
-            val event = Event(
-                id = 1L, name = "Concert",
-                eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
-                status = EventStatus.OPEN
-            )
-            `when`(eventRepository.findByStatus(EventStatus.OPEN)).thenReturn(listOf(event))
-            `when`(seatRepository.countAvailableSeats(1L)).thenReturn(42L)
-            `when`(seatQueryRepository.countAvailableBySection(1L)).thenReturn(listOf(
-                SectionAvailabilityResponse("A", 25L, 30L)
-            ))
+    @Test
+    @DisplayName("getMyReservations - 좌석 없으면 payment-service 호출 없이 빈 리스트")
+    fun getMyReservationsNoSeats() {
+        `when`(seatRepository.findActiveByUserId(1L)).thenReturn(emptyList())
 
-            eventService.syncAllRemainingSeats()
+        val result = service.getMyReservations(1L)
 
-            val inOrder = inOrder(dynamicScheduler, seatRepository, eventCache)
-            inOrder.verify(dynamicScheduler).stopProcessing(1L)
-            inOrder.verify(seatRepository).countAvailableSeats(1L)
-            inOrder.verify(eventCache).setField(1L, "remainingSeats", "42")
-            inOrder.verify(dynamicScheduler).startProcessing(1L)
-        }
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    @DisplayName("getMyReservations - 결제 정보 없으면 paymentId/paymentStatus null")
+    fun getMyReservationsNoPayment() {
+        val seat = Seat(
+            id = 10L, event = event, seatNumber = "A-1", section = "A",
+            status = SeatStatus.PAYMENT_PENDING, userId = 1L, priceAmount = 200000L
+        )
+        `when`(seatRepository.findActiveByUserId(1L)).thenReturn(listOf(seat))
+        `when`(paymentClient.listByUser(1L)).thenReturn(emptyList())
+
+        val result = service.getMyReservations(1L)
+
+        assertEquals(1, result.size)
+        assertNull(result[0].paymentId)
+        assertNull(result[0].paymentStatus)
     }
 }

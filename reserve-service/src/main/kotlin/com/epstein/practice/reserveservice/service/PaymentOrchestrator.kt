@@ -27,7 +27,7 @@ class PaymentOrchestrator(
     private val logger = LoggerFactory.getLogger(PaymentOrchestrator::class.java)
 
     @Transactional
-    fun pay(eventId: Long, userId: Long, amount: Long, method: String): PaymentOrchestrationResult {
+    fun pay(eventId: Long, userId: Long, method: String): PaymentOrchestrationResult {
         val seat = seatRepository.findByEventIdAndUserIdAndStatus(eventId, userId, SeatStatus.PAYMENT_PENDING)
             ?: throw ServerException(
                 message = "결제 대기 중인 좌석이 없습니다",
@@ -39,7 +39,7 @@ class PaymentOrchestrator(
                 userId = userId,
                 seatId = seat.id,
                 eventId = eventId,
-                amount = amount,
+                amount = seat.priceAmount,
                 method = method
             )
         )

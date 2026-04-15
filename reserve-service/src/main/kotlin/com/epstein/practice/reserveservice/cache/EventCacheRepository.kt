@@ -1,8 +1,12 @@
 package com.epstein.practice.reserveservice.cache
 
+import com.epstein.practice.reserveservice.constant.OPEN_EVENTS_INDEX_KEY
+import com.epstein.practice.reserveservice.constant.SEAT_PRICE_FIELD_PREFIX
 import com.epstein.practice.reserveservice.constant.eventCacheKey
 import com.epstein.practice.reserveservice.constant.seatCacheKey
+import com.epstein.practice.reserveservice.constant.seatPriceField
 import com.epstein.practice.reserveservice.constant.sectionAvailableField
+import com.epstein.practice.reserveservice.constant.sectionPriceField
 import org.springframework.core.io.ClassPathResource
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
@@ -66,6 +70,49 @@ class EventCacheRepository(
 
     fun getSectionAvailable(eventId: Long, section: String): Long {
         return hashOps.get(eventCacheKey(eventId), sectionAvailableField(section))?.toLongOrNull() ?: 0
+    }
+
+    fun getSectionPrice(eventId: Long, section: String): Long {
+        return hashOps.get(eventCacheKey(eventId), sectionPriceField(section))?.toLongOrNull() ?: 0
+    }
+
+    fun setSeatPrices(eventId: Long, prices: Map<Long, Long>) {
+        if (prices.isEmpty()) return
+        val fields = prices.mapKeys { (id, _) -> seatPriceField(id) }
+            .mapValues { (_, v) -> v.toString() }
+        hashOps.putAll(eventCacheKey(eventId), fields)
+    }
+
+    fun getSeatPrice(eventId: Long, seatId: Long): Long {
+        return hashOps.get(eventCacheKey(eventId), seatPriceField(seatId))?.toLongOrNull() ?: 0
+    }
+
+    fun getAllSeatPrices(eventId: Long): Map<Long, Long> {
+        val all = hashOps.entries(eventCacheKey(eventId))
+        return all.entries.asSequence()
+            .filter { it.key.startsWith(SEAT_PRICE_FIELD_PREFIX) }
+            .mapNotNull { entry ->
+                val seatId = entry.key.removePrefix(SEAT_PRICE_FIELD_PREFIX).toLongOrNull() ?: return@mapNotNull null
+                val price = entry.value.toLongOrNull() ?: return@mapNotNull null
+                seatId to price
+            }
+            .toMap()
+    }
+
+    // === Open Events Index (ZSET, score = ticketOpenTime epoch millis) ===
+
+    fun addOpenEventIndex(eventId: Long, score: Double) {
+        redis.opsForZSet().add(OPEN_EVENTS_INDEX_KEY, eventId.toString(), score)
+    }
+
+    fun removeOpenEventIndex(eventId: Long) {
+        redis.opsForZSet().remove(OPEN_EVENTS_INDEX_KEY, eventId.toString())
+    }
+
+    fun getOpenEventIdsOrderedByTicketOpenTime(): List<Long> {
+        return redis.opsForZSet().range(OPEN_EVENTS_INDEX_KEY, 0, -1)
+            ?.mapNotNull { it.toLongOrNull() }
+            ?: emptyList()
     }
 
     // === Seat Cache ===

@@ -1,6 +1,7 @@
 package com.epstein.practice.reserveservice.client
 
 import org.slf4j.LoggerFactory
+import org.springframework.core.ParameterizedTypeReference
 import org.springframework.stereotype.Component
 import org.springframework.web.client.HttpClientErrorException
 import org.springframework.web.client.ResourceAccessException
@@ -35,7 +36,36 @@ class PaymentClient(
             PaymentProcessResult(success = false, message = "결제 서비스에 연결할 수 없습니다")
         }
     }
+
+    fun listByUser(userId: Long): List<PaymentSummary> {
+        return try {
+            val response = paymentServiceClient.get()
+                .uri("/api/v1/payments?userId={userId}", userId)
+                .retrieve()
+                .body(object : ParameterizedTypeReference<PaymentListResponse>() {})
+
+            response?.data.orEmpty().map {
+                PaymentSummary(id = it.id, seatId = it.seatId, status = it.status)
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to list payments for user {}: {}", userId, e.message)
+            emptyList()
+        }
+    }
 }
+
+data class PaymentSummary(
+    val id: Long,
+    val seatId: Long,
+    val status: String
+)
+
+private data class PaymentListResponse(
+    val status: String,
+    val data: List<PaymentData>?,
+    val message: String?,
+    val code: String?
+)
 
 data class PaymentProcessRequest(
     val userId: Long,

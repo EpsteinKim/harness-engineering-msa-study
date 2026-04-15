@@ -1,6 +1,6 @@
 package com.epstein.practice.reserveservice.scheduler
 
-import com.epstein.practice.reserveservice.service.EventService
+import com.epstein.practice.reserveservice.service.EventLifecycleService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -14,7 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension
 class EventSchedulerTest {
 
     @Mock
-    lateinit var eventService: EventService
+    lateinit var eventService: EventLifecycleService
 
     lateinit var scheduler: EventScheduler
 
