@@ -61,7 +61,7 @@ class PaymentOrchestratorTest {
 
     private fun pendingSeat(): Seat = Seat(
         id = 10L, event = event, seatNumber = "A-1", section = "A",
-        status = SeatStatus.PAYMENT_PENDING, userId = 1L
+        status = SeatStatus.PAYMENT_PENDING, userId = 1L, priceAmount = 200000L
     )
 
     @Test
@@ -71,11 +71,11 @@ class PaymentOrchestratorTest {
         `when`(seatRepository.findByEventIdAndUserIdAndStatus(1L, 1L, SeatStatus.PAYMENT_PENDING))
             .thenReturn(seat)
         `when`(paymentClient.processPayment(
-            PaymentProcessRequest(userId = 1L, seatId = 10L, eventId = 1L, amount = 50000L, method = "CARD")
+            PaymentProcessRequest(userId = 1L, seatId = 10L, eventId = 1L, amount = 200000L, method = "CARD")
         ))
             .thenReturn(PaymentProcessResult(success = true, paymentId = 100L, message = "ok"))
 
-        val result = orchestrator.pay(1L, 1L, 50000L, "CARD")
+        val result = orchestrator.pay(1L, 1L, "CARD")
 
         assertTrue(result.success)
         assertEquals(SeatStatus.RESERVED, seat.status)
@@ -91,12 +91,12 @@ class PaymentOrchestratorTest {
         `when`(seatRepository.findByEventIdAndUserIdAndStatus(1L, 1L, SeatStatus.PAYMENT_PENDING))
             .thenReturn(seat)
         `when`(paymentClient.processPayment(
-            PaymentProcessRequest(userId = 1L, seatId = 10L, eventId = 1L, amount = 50000L, method = "CARD")
+            PaymentProcessRequest(userId = 1L, seatId = 10L, eventId = 1L, amount = 200000L, method = "CARD")
         ))
             .thenReturn(PaymentProcessResult(success = false, message = "failed"))
         `when`(eventRepository.findById(1L)).thenReturn(Optional.of(event))
 
-        val result = orchestrator.pay(1L, 1L, 50000L, "CARD")
+        val result = orchestrator.pay(1L, 1L, "CARD")
 
         assertFalse(result.success)
         assertEquals(SeatStatus.AVAILABLE, seat.status)
@@ -113,7 +113,7 @@ class PaymentOrchestratorTest {
             .thenReturn(null)
 
         val exception = assertThrows(ServerException::class.java) {
-            orchestrator.pay(1L, 1L, 50000L, "CARD")
+            orchestrator.pay(1L, 1L, "CARD")
         }
         assertEquals("PAYMENT_PENDING_NOT_FOUND", exception.code)
     }
@@ -126,12 +126,12 @@ class PaymentOrchestratorTest {
         `when`(seatRepository.findByEventIdAndUserIdAndStatus(1L, 1L, SeatStatus.PAYMENT_PENDING))
             .thenReturn(seat)
         `when`(paymentClient.processPayment(
-            PaymentProcessRequest(userId = 1L, seatId = 10L, eventId = 1L, amount = 50000L, method = "CARD")
+            PaymentProcessRequest(userId = 1L, seatId = 10L, eventId = 1L, amount = 200000L, method = "CARD")
         ))
             .thenReturn(PaymentProcessResult(success = false, message = "failed"))
         `when`(eventRepository.findById(1L)).thenReturn(Optional.of(event))
 
-        orchestrator.pay(1L, 1L, 50000L, "CARD")
+        orchestrator.pay(1L, 1L, "CARD")
 
         verify(dynamicScheduler, never()).startProcessing(anyLong())
     }

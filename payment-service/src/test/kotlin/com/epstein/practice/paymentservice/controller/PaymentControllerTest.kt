@@ -71,4 +71,22 @@ class PaymentControllerTest {
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("PAYMENT_NOT_FOUND"))
     }
+
+    @Test
+    @DisplayName("GET /api/v1/payments?userId=X - 유저 결제 목록")
+    fun listByUser() {
+        val payment = Payment(
+            id = 1L, seatId = 10L, userId = 1L, eventId = 1L,
+            amount = 10000L, method = "CARD",
+            status = PaymentStatus.SUCCEEDED,
+            completedAt = LocalDateTime.now()
+        )
+        `when`(paymentService.getByUserId(1L)).thenReturn(listOf(payment))
+
+        mockMvc.perform(get("/api/v1/payments").param("userId", "1"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.data.length()").value(1))
+            .andExpect(jsonPath("$.data[0].id").value(1))
+            .andExpect(jsonPath("$.data[0].seatId").value(10))
+    }
 }

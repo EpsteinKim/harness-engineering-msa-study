@@ -76,6 +76,18 @@ Phase 단계별 진행. 현재 Phase 2 (Docker Compose MSA).
 - 진행 중인 계획: `docs/exec-plans/active/`에 마크다운 파일로 작성하고, `docs/exec-plans/active/index.md`에 기록할 것.
 - **완료된 계획은 반드시 `docs/exec-plans/completed/`로 이동하고, `docs/exec-plans/completed/index.md`에 기록할 것.**
 
+## API 탐색 (Swagger UI)
+
+애플리케이션이 기동 중이면 Gateway의 Swagger UI에서 서비스별 API를 확인할 수 있다.
+
+- 통합 UI: `http://localhost:8080/swagger-ui/index.html`
+- 서비스별 직접 조회: `http://localhost:8080/swagger-ui/index.html?urls.primaryName={서비스명}`
+  - `reserve-service`: `?urls.primaryName=reserve-service`
+  - `user-service`: `?urls.primaryName=user-service`
+  - `payment-service`: `?urls.primaryName=payment-service`
+
+API 시그니처, 요청/응답 스키마, 실제 경로(`/api/v1/...`)가 필요할 때는 코드 탐색보다 Swagger UI를 먼저 참조한다. (단, 서버가 기동 중이어야 하며, 계약상 최종 진실은 여전히 소스코드의 컨트롤러 시그니처다.)
+
 ## Testing
 
 테스트 작성 지침은 `docs/TEST_GUIDE.md` 참조.

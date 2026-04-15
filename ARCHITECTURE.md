@@ -129,13 +129,15 @@ seats  (id, event_id FK, seat_number, section, status, reserved_by, reserved_at,
 - `seats.section`: 구역 (A~Z), VARCHAR(1)
 - `seats.version`: 낙관적 락 (@Version) — 동시 예약 충돌 방지
 - `seats.status`: AVAILABLE | PAYMENT_PENDING | RESERVED
+- `seats.price_amount`: 좌석 가격 (BIGINT, KRW). SECTION_SELECT는 같은 섹션 동가, SEAT_PICK은 좌석별 차등 가능
 - 인덱스: `idx_seats_event_section(event_id, section)`, `idx_seats_event_status(event_id, status)`
 
 ### Redis 구조 (reserve-service)
 
 | Key | Type | 용도 |
 |-----|------|------|
-| `event:{eventId}` | Hash | 이벤트 캐시 (name, remainingSeats, seatSelectionType, 구역별 available/total, TTL=ticketCloseTime) |
+| `event:{eventId}` | Hash | 이벤트 캐시 (id, name, status, eventTime, ticketOpenTime, ticketCloseTime, remainingSeats, seatSelectionType, 구역별 available/total/**price**, **SEAT_PICK은 seat_price:{seatId}** 추가, TTL=ticketCloseTime) |
+| `events:open` | Sorted Set (score=ticketOpenTime epoch sec) | OPEN 이벤트 ID 인덱스. `/events` 목록 조회 시 ZRANGE로 정렬된 ID 배열 획득 후 각 event hash HGETALL 조립 (DB 히트 없이) |
 | `event:{eventId}:seats` | Hash | 좌석별 상태 캐시 (SEAT_PICK만, field=seatId, value=`section:num:STATUS[:userId:heldUntilMs]`) |
 | `reservation:waiting:{eventId}` | Sorted Set (score=timestamp) | 이벤트별 대기열 |
 | `reservation:metadata:{eventId}:{userId}` | Hash (seatId/section) | 예약 요청 메타데이터 (이벤트별 독립) |
@@ -263,3 +265,6 @@ harness-back/
 | 2026-04-12 | v8.0.0 | SEAT_PICK HOLD(Lua 원자성, lazy expiry), SECTION_FULL 거부, 좌석 맵 조회 API, 스케줄러 ScheduledFuture 관리 + 잔여석 0 시 큐 정리, GlobalExceptionHandler scanBasePackages 수정 | - |
 | 2026-04-13 | v9.0.0 | user-service 기본 기능(read/update + 한국식 이름 10,000명 시드), reserve→user RestClient 인터서비스 호출(USER_NOT_FOUND), DB 환경변수 서비스별 분리 | - |
 | 2026-04-14 | v10.0.0 | payment-service 신설 + Saga 오케스트레이션 MVP: Seat에 PAYMENT_PENDING 상태 추가, POST /reservations/pay → payment-service 동기 호출, 실패 시 좌석 AVAILABLE 복구 + 스케줄러 재시작 보상 | - |
+| 2026-04-15 | v11.0.0 | 좌석/섹션별 가격(seat.price_amount) 도입, EventCache에 가격 캐싱(섹션:price, seat_price:{seatId}), 응답 DTO에 priceAmount 노출, PaymentRequest amount 제거 — 서버 source-of-truth로 위변조 차단 | - |
+| 2026-04-15 | v11.1.0 | 프론트 연동용 조회 API 추가: reserve-service에 EventController(`/events`, `/events/{id}`, `/my`), EventQueryService; payment-service에 `GET /payments?userId=X` 목록 API; PaymentClient에 listByUser 메서드 | - |
+| 2026-04-15 | v11.2.0 | `/events` / `/events/{id}` Redis-first로 전환: `events:open` ZSET 인덱스 + event hash HGETALL로 DB 히트 없이 조회. cache miss 시 DB fallback. openEvents/closeEvents에서 ZSET 유지. event hash에 id/status/ticketOpenTime 필드 추가 | - |

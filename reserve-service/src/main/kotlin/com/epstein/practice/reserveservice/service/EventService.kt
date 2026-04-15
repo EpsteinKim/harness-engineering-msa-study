@@ -1,143 +1,103 @@
 package com.epstein.practice.reserveservice.service
 
+import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.reserveservice.cache.EventCacheRepository
-import com.epstein.practice.reserveservice.constant.sectionAvailableField
-import com.epstein.practice.reserveservice.constant.sectionTotalField
+import com.epstein.practice.reserveservice.client.PaymentClient
+import com.epstein.practice.reserveservice.constant.ErrorCode
+import com.epstein.practice.reserveservice.dto.EventSummaryResponse
+import com.epstein.practice.reserveservice.dto.MyReservationItem
 import com.epstein.practice.reserveservice.entity.Event
 import com.epstein.practice.reserveservice.entity.EventStatus
-import com.epstein.practice.reserveservice.entity.SeatSelectionType
 import com.epstein.practice.reserveservice.repository.EventRepository
 import com.epstein.practice.reserveservice.repository.SeatRepository
-import com.epstein.practice.reserveservice.repository.support.SeatQueryRepository
-import com.epstein.practice.reserveservice.scheduler.DynamicScheduler
-import com.fasterxml.jackson.databind.util.JSONPObject
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
-import java.time.Duration
 import java.time.LocalDateTime
 
 @Service
 class EventService(
     private val eventRepository: EventRepository,
     private val seatRepository: SeatRepository,
-    private val seatQueryRepository: SeatQueryRepository,
     private val eventCache: EventCacheRepository,
-    private val dynamicScheduler: DynamicScheduler
+    private val paymentClient: PaymentClient,
 ) {
-    private val logger = LoggerFactory.getLogger(EventService::class.java)
-
-    @Transactional
-    fun openEvents(): Int {
-        val now = LocalDateTime.now()
-        val events = eventRepository.findEventsToOpen(EventStatus.CLOSED, now)
-
-        for (event in events) {
-            event.status = EventStatus.OPEN
-            eventRepository.save(event)
-            cacheEvent(event)
-            dynamicScheduler.startProcessing(event.id)
-            logger.info("Opened event: id={}, name={}", event.id, event.name)
-        }
-        return events.size
-    }
-
-    @Transactional
-    fun closeEvents(): Int {
-        val now = LocalDateTime.now()
-        val events = eventRepository.findEventsToClose(EventStatus.OPEN, now)
-
-        for (event in events) {
-            event.status = EventStatus.CLOSED
-            eventRepository.save(event)
-            eventCache.deleteEvent(event.id)
-            eventCache.deleteSeatCache(event.id)
-            dynamicScheduler.stopProcessing(event.id)
-            logger.info("Closed event: id={}, name={}", event.id, event.name)
-        }
-        return events.size
-    }
-
-    fun getOpenEventIds(): List<Long> =
-        eventRepository.findByStatus(EventStatus.OPEN).map { it.id }
-
-    fun warmupCache(): Int {
-        val openEvents = eventRepository.findByStatus(EventStatus.OPEN)
-        for (event in openEvents) {
-            cacheEvent(event)
-            dynamicScheduler.startProcessing(event.id)
-            logger.info("Warmed up cache for event: id={}, name={}", event.id, event.name)
-        }
-        return openEvents.size
-    }
-
-    fun isEventOpen(eventId: Long): Boolean {
-        return eventCache.exists(eventId)
-    }
-
-    fun syncAllRemainingSeats(): Int {
-        val openEvents = eventRepository.findByStatus(EventStatus.OPEN)
-        for (event in openEvents) {
-            logger.info("Syncing seats for event: id={}, name={}", event.id, event.name)
-            dynamicScheduler.stopProcessing(event.id)
-            try {
-                val actualCount = seatRepository.countAvailableSeats(event.id)
-                eventCache.setField(event.id, "remainingSeats", actualCount.toString())
-
-                val sectionData = seatQueryRepository.countAvailableBySection(event.id)
-                for (section in sectionData) {
-                    eventCache.setField(event.id, sectionAvailableField(section.section), section.availableCount.toString())
-                }
-
-                if (event.seatSelectionType == SeatSelectionType.SEAT_PICK) {
-                    cacheAllSeats(event.id)
-                }
-            } finally {
-                dynamicScheduler.startProcessing(event.id)
+    /**
+     * OPEN 이벤트 목록 — Redis ZSET 인덱스 + HGETALL로 조립.
+     * 캐시 miss(워밍 전 또는 장애) 시 DB fallback.
+     */
+    fun listEvents(status: EventStatus): List<EventSummaryResponse> {
+        if (status == EventStatus.OPEN) {
+            val ids = eventCache.getOpenEventIdsOrderedByTicketOpenTime()
+            if (ids.isNotEmpty()) {
+                return ids.mapNotNull { id -> fromCache(id) }
             }
         }
-        return openEvents.size
+        // fallback: CLOSED/DELETED 조회 또는 OPEN 캐시 비어있음
+        return eventRepository.findByStatusOrderByTicketOpenTimeAsc(status).map { toSummary(it) }
     }
 
-    private fun cacheEvent(event: Event) {
-        val remainingSeats = seatRepository.countAvailableSeats(event.id)
-        val fields = mutableMapOf(
-            "name" to event.name,
-            "remainingSeats" to remainingSeats.toString(),
-            "ticketCloseTime" to (event.ticketCloseTime?.toString() ?: ""),
-            "eventTime" to event.eventTime.toString(),
-            "seatSelectionType" to event.seatSelectionType.name
+    /**
+     * 이벤트 단건 — Redis HGETALL 우선, 없으면 DB fallback.
+     */
+    fun getEvent(eventId: Long): EventSummaryResponse {
+        fromCache(eventId)?.let { return it }
+
+        val event = eventRepository.findById(eventId).orElseThrow {
+            ServerException(message = "이벤트를 찾을 수 없습니다", code = ErrorCode.EVENT_NOT_OPEN)
+        }
+        return toSummary(event)
+    }
+
+    fun getMyReservations(userId: Long): List<MyReservationItem> {
+        val seats = seatRepository.findActiveByUserId(userId)
+        if (seats.isEmpty()) return emptyList()
+
+        val payments = paymentClient.listByUser(userId).associateBy { it.seatId }
+
+        return seats.map { seat ->
+            val p = payments[seat.id]
+            MyReservationItem(
+                eventId = seat.event.id,
+                eventName = seat.event.name,
+                eventTime = seat.event.eventTime,
+                seatId = seat.id,
+                seatNumber = seat.seatNumber,
+                section = seat.section,
+                priceAmount = seat.priceAmount,
+                paymentId = p?.id,
+                paymentStatus = p?.status,
+                reservedAt = seat.reservedAt
+            )
+        }
+    }
+
+    // === 캐시 ↔ 응답 변환 ===
+
+    private fun fromCache(eventId: Long): EventSummaryResponse? {
+        val fields = eventCache.getAllFields(eventId)
+        if (fields.isEmpty()) return null
+        return EventSummaryResponse(
+            id = fields["id"]?.toLongOrNull() ?: eventId,
+            name = fields["name"] ?: return null,
+            eventTime = fields["eventTime"]?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() } ?: return null,
+            status = fields["status"] ?: "OPEN",
+            ticketOpenTime = fields["ticketOpenTime"]?.takeIf { it.isNotEmpty() }
+                ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() },
+            ticketCloseTime = fields["ticketCloseTime"]?.takeIf { it.isNotEmpty() }
+                ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() },
+            seatSelectionType = fields["seatSelectionType"] ?: "SECTION_SELECT",
+            remainingSeats = fields["remainingSeats"]?.toLongOrNull() ?: 0
         )
-
-        val sectionData = seatQueryRepository.countAvailableBySection(event.id)
-        for (section in sectionData) {
-            fields[sectionAvailableField(section.section)] = section.availableCount.toString()
-            fields[sectionTotalField(section.section)] = section.totalCount.toString()
-        }
-
-        eventCache.saveEvent(event.id, fields)
-
-        val closeTime = event.ticketCloseTime ?: return
-        val ttl = Duration.between(LocalDateTime.now(), closeTime)
-        if (!ttl.isNegative) {
-            eventCache.expireEvent(event.id, ttl)
-        }
-
-        if (event.seatSelectionType == SeatSelectionType.SEAT_PICK) {
-            cacheAllSeats(event.id)
-            if (!ttl.isNegative) {
-                eventCache.expireSeatCache(event.id, ttl)
-            }
-        }
     }
 
-    private fun cacheAllSeats(eventId: Long) {
-        val seats = seatRepository.findByEventId(eventId)
-        if (seats.isEmpty()) return
-
-        val seatFields = seats.associate { seat ->
-            seat.id.toString() to "${seat.section}:${seat.seatNumber}:${seat.status.name}"
-        }
-        eventCache.saveAllSeats(eventId, seatFields)
-    }
+    private fun toSummary(e: Event): EventSummaryResponse =
+        EventSummaryResponse(
+            id = e.id,
+            name = e.name,
+            eventTime = e.eventTime,
+            status = e.status.name,
+            ticketOpenTime = e.ticketOpenTime,
+            ticketCloseTime = e.ticketCloseTime,
+            seatSelectionType = e.seatSelectionType.name,
+            remainingSeats = eventCache.getRemainingSeats(e.id)
+        )
 }

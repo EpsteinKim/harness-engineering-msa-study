@@ -31,6 +31,9 @@ class Seat(
     @Column(name = "reserved_at")
     var reservedAt: LocalDateTime? = null,
 
+    @Column(name = "price_amount", nullable = false)
+    val priceAmount: Long = 0,
+
     @Version
     val version: Long = 0
 ) {

@@ -16,4 +16,5 @@ interface EventRepository : JpaRepository<Event, Long> {
     fun findEventsToClose(@Param("status") status: EventStatus, @Param("now") now: LocalDateTime): List<Event>
 
     fun findByStatus(status: EventStatus): List<Event>
+    fun findByStatusOrderByTicketOpenTimeAsc(status: EventStatus): List<Event>
 }

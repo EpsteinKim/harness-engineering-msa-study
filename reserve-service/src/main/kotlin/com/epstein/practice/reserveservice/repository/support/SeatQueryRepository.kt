@@ -4,6 +4,7 @@ import com.epstein.practice.reserveservice.dto.SectionAvailabilityResponse
 import com.epstein.practice.reserveservice.entity.QSeat
 import com.epstein.practice.reserveservice.entity.SeatStatus
 import com.querydsl.core.types.Projections
+import com.querydsl.core.types.dsl.Expressions
 import com.querydsl.jpa.JPAExpressions
 import com.querydsl.jpa.impl.JPAQueryFactory
 import org.springframework.stereotype.Repository
@@ -29,7 +30,8 @@ class SeatQueryRepository(
                         .where(
                             sub.event.id.eq(eventId),
                             sub.section.eq(seat.section)
-                        )
+                        ),
+                    Expressions.constant(0L)
                 )
             )
             .from(seat)

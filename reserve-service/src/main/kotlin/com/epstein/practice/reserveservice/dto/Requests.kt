@@ -10,6 +10,5 @@ data class ReservationRequest(
 data class PaymentRequest(
     val userId: Long,
     val eventId: Long,
-    val amount: Long,
     val method: String
 )

@@ -41,8 +41,8 @@ class SeatControllerTest {
         @DisplayName("구역별 잔여석 정보를 반환한다")
         fun getSectionAvailability() {
             val availability = listOf(
-                SectionAvailabilityResponse("A", 5L, 10L),
-                SectionAvailabilityResponse("B", 3L, 10L)
+                SectionAvailabilityResponse("A", 5L, 10L, 200000L),
+                SectionAvailabilityResponse("B", 3L, 10L, 150000L)
             )
             `when`(seatService.getSectionAvailability(1L)).thenReturn(availability)
 
@@ -74,8 +74,8 @@ class SeatControllerTest {
         fun getSeatMap() {
             `when`(seatService.getSeatMap(1L, null)).thenReturn(
                 listOf(
-                    SeatMapEntry(10L, "A", "A-1", "AVAILABLE"),
-                    SeatMapEntry(11L, "A", "A-2", "HELD")
+                    SeatMapEntry(10L, "A", "A-1", "AVAILABLE", 200000L),
+                    SeatMapEntry(11L, "A", "A-2", "HELD", 200000L)
                 )
             )
 
@@ -94,7 +94,7 @@ class SeatControllerTest {
         @DisplayName("section 쿼리가 주어지면 Service에 전달된다")
         fun getSeatMapWithSectionFilter() {
             `when`(seatService.getSeatMap(1L, "A")).thenReturn(
-                listOf(SeatMapEntry(10L, "A", "A-1", "AVAILABLE"))
+                listOf(SeatMapEntry(10L, "A", "A-1", "AVAILABLE", 200000L))
             )
 
             mockMvc.perform(get("/api/v1/reservations/seats/1").param("section", "A"))

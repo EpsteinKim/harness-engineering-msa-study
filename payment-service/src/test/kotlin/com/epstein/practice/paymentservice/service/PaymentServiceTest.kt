@@ -76,4 +76,20 @@ class PaymentServiceTest {
         val exception = assertThrows(ServerException::class.java) { service.getById(999L) }
         assertEquals("PAYMENT_NOT_FOUND", exception.code)
     }
+
+    @Test
+    @DisplayName("getByUserId - 유저 결제 목록 최신순 반환")
+    fun getByUserId() {
+        buildService(rate = 0.7, nextDouble = 0.5)
+        val payment = Payment(
+            id = 1L, seatId = 10L, userId = 1L, eventId = 1L,
+            amount = 10000L, method = "CARD", status = PaymentStatus.SUCCEEDED
+        )
+        `when`(paymentRepository.findByUserIdOrderByCreatedAtDesc(1L)).thenReturn(listOf(payment))
+
+        val result = service.getByUserId(1L)
+
+        assertEquals(1, result.size)
+        assertEquals(10L, result[0].seatId)
+    }
 }
