@@ -1,23 +1,16 @@
 package com.epstein.practice.reserveservice.constant
 
-enum class RedisStatus {
-    WAITING, SUCCESS, FAILED,
-}
-
 object ErrorCode {
     const val EVENT_NOT_OPEN = "EVENT_NOT_OPEN"
     const val NO_REMAINING_SEATS = "NO_REMAINING_SEATS"
     const val INVALID_REQUEST = "INVALID_REQUEST"
     const val INVALID_SECTION = "INVALID_SECTION"
-    const val SEAT_NOT_FOUND = "SEAT_NOT_FOUND"
-    const val SEAT_ALREADY_RESERVED = "SEAT_ALREADY_RESERVED"
     const val SEAT_UNAVAILABLE = "SEAT_UNAVAILABLE"
     const val SECTION_FULL = "SECTION_FULL"
     const val ALREADY_IN_QUEUE = "ALREADY_IN_QUEUE"
     const val QUEUE_NOT_FOUND = "QUEUE_NOT_FOUND"
     const val USER_NOT_FOUND = "USER_NOT_FOUND"
     const val PAYMENT_PENDING_NOT_FOUND = "PAYMENT_PENDING_NOT_FOUND"
-    const val PAYMENT_FAILED = "PAYMENT_FAILED"
 }
 
 object SeatCacheStatus {
@@ -49,12 +42,3 @@ fun parseSeatValue(raw: String): ParsedSeat? {
 }
 
 fun waitingKey(eventId: Long) = "reservation:waiting:$eventId"
-fun eventCacheKey(eventId: Long) = "event:$eventId"
-fun metadataKey(eventId: Long, userId: String) = "reservation:metadata:$eventId:$userId"
-fun sectionAvailableField(section: String) = "section:$section:available"
-fun sectionTotalField(section: String) = "section:$section:total"
-fun sectionPriceField(section: String) = "section:$section:price"
-fun seatPriceField(seatId: Long) = "seat_price:$seatId"
-const val SEAT_PRICE_FIELD_PREFIX = "seat_price:"
-fun seatCacheKey(eventId: Long) = "event:$eventId:seats"
-const val OPEN_EVENTS_INDEX_KEY = "events:open"

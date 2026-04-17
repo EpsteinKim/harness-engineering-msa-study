@@ -44,13 +44,6 @@ class EventCacheRepositoryTest {
         }
 
         @Test
-        @DisplayName("이벤트 캐시를 삭제한다")
-        fun deleteEvent() {
-            eventCache.deleteEvent(1L)
-            verify(redis).delete("event:1")
-        }
-
-        @Test
         @DisplayName("이벤트 캐시 존재 여부를 확인한다")
         fun exists() {
             `when`(redis.hasKey("event:1")).thenReturn(true)

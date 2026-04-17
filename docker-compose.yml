@@ -10,7 +10,7 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
     depends_on:
-      - user-service
+      - core-service
       - reserve-service
       - payment-service
     networks:
@@ -26,16 +26,23 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - harness-net
 
-  user-service:
+  core-service:
     build:
       context: .
       args:
-        SERVICE_NAME: user-service
+        SERVICE_NAME: core-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - harness-net
 
@@ -46,6 +53,9 @@ services:
         SERVICE_NAME: payment-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      kafka:
+        condition: service_healthy
     networks:
       - harness-net
 
@@ -63,8 +73,39 @@ services:
     networks:
       - harness-net
 
+  kafka:
+    image: apache/kafka:4.1.0
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: "KAFKA-PRACTICE-HARNESS-0"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - harness-net
+
 volumes:
   redis-data:
+  kafka-data:
 
 networks:
   harness-net:

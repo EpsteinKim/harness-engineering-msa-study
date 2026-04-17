@@ -1,17 +1,16 @@
 package com.epstein.practice.reserveservice.cache
 
-import com.epstein.practice.reserveservice.constant.OPEN_EVENTS_INDEX_KEY
-import com.epstein.practice.reserveservice.constant.SEAT_PRICE_FIELD_PREFIX
-import com.epstein.practice.reserveservice.constant.eventCacheKey
-import com.epstein.practice.reserveservice.constant.seatCacheKey
-import com.epstein.practice.reserveservice.constant.seatPriceField
-import com.epstein.practice.reserveservice.constant.sectionAvailableField
-import com.epstein.practice.reserveservice.constant.sectionPriceField
+import com.epstein.practice.common.cache.OPEN_EVENTS_INDEX_KEY
+import com.epstein.practice.common.cache.SEAT_PRICE_FIELD_PREFIX
+import com.epstein.practice.common.cache.eventCacheKey
+import com.epstein.practice.common.cache.seatCacheKey
+import com.epstein.practice.common.cache.seatPriceField
+import com.epstein.practice.common.cache.sectionAvailableField
+import com.epstein.practice.common.cache.sectionPriceField
 import org.springframework.core.io.ClassPathResource
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Repository
-import java.time.Duration
 
 @Repository
 class EventCacheRepository(
@@ -33,14 +32,6 @@ class EventCacheRepository(
 
     fun saveEvent(eventId: Long, fields: Map<String, String>) {
         hashOps.putAll(eventCacheKey(eventId), fields)
-    }
-
-    fun deleteEvent(eventId: Long) {
-        redis.delete(eventCacheKey(eventId))
-    }
-
-    fun expireEvent(eventId: Long, ttl: Duration) {
-        redis.expire(eventCacheKey(eventId), ttl)
     }
 
     fun exists(eventId: Long): Boolean {
@@ -99,15 +90,7 @@ class EventCacheRepository(
             .toMap()
     }
 
-    // === Open Events Index (ZSET, score = ticketOpenTime epoch millis) ===
-
-    fun addOpenEventIndex(eventId: Long, score: Double) {
-        redis.opsForZSet().add(OPEN_EVENTS_INDEX_KEY, eventId.toString(), score)
-    }
-
-    fun removeOpenEventIndex(eventId: Long) {
-        redis.opsForZSet().remove(OPEN_EVENTS_INDEX_KEY, eventId.toString())
-    }
+    // === Open Events Index (ZSET, read-only — core-service가 관리) ===
 
     fun getOpenEventIdsOrderedByTicketOpenTime(): List<Long> {
         return redis.opsForZSet().range(OPEN_EVENTS_INDEX_KEY, 0, -1)
@@ -123,10 +106,6 @@ class EventCacheRepository(
 
     fun deleteSeatCache(eventId: Long) {
         redis.delete(seatCacheKey(eventId))
-    }
-
-    fun expireSeatCache(eventId: Long, ttl: Duration) {
-        redis.expire(seatCacheKey(eventId), ttl)
     }
 
     fun getSeatStatus(eventId: Long, seatId: Long): String? {

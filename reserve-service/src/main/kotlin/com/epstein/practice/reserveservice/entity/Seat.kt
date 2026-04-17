@@ -1,6 +1,5 @@
 package com.epstein.practice.reserveservice.entity
 
-import com.epstein.practice.reserveservice.dto.SeatDTO
 import jakarta.persistence.*
 import java.time.LocalDateTime
 
@@ -11,9 +10,8 @@ class Seat(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "event_id", nullable = false)
-    val event: Event,
+    @Column(name = "event_id", nullable = false)
+    val eventId: Long,
 
     @Column(name = "seat_number", nullable = false, length = 20)
     val seatNumber: String,
@@ -36,9 +34,7 @@ class Seat(
 
     @Version
     val version: Long = 0
-) {
-    fun toDTO(): SeatDTO = SeatDTO(this.id, this.seatNumber, this.section, this.status)
-}
+)
 
 enum class SeatStatus {
     AVAILABLE,

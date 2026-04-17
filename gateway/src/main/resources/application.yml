@@ -9,10 +9,15 @@ spring:
       server:
         webflux:
           routes:
-            - id: user-service
-              uri: http://localhost:8081
+            - id: core-service-users
+              uri: http://localhost:8084
               predicates:
                 - Path=/api/v1/users/**
+
+            - id: core-service-events
+              uri: http://localhost:8084
+              predicates:
+                - Path=/api/v1/events/**
 
             - id: reserve-service
               uri: http://localhost:8082
@@ -32,10 +37,10 @@ spring:
               filters:
                 - SetPath=/v3/api-docs
 
-            - id: user-docs
-              uri: http://localhost:8081
+            - id: core-docs
+              uri: http://localhost:8084
               predicates:
-                - Path=/api-docs/user
+                - Path=/api-docs/core
               filters:
                 - SetPath=/v3/api-docs
 
@@ -52,8 +57,8 @@ springdoc:
     urls:
       - name: reserve-service
         url: /api-docs/reserve
-      - name: user-service
-        url: /api-docs/user
+      - name: core-service
+        url: /api-docs/core
       - name: payment-service
         url: /api-docs/payment
 
@@ -67,10 +72,15 @@ spring:
       server:
         webflux:
           routes:
-            - id: user-service
-              uri: http://user-service:8080
+            - id: core-service-users
+              uri: http://core-service:8080
               predicates:
                 - Path=/api/v1/users/**
+
+            - id: core-service-events
+              uri: http://core-service:8080
+              predicates:
+                - Path=/api/v1/events/**
 
             - id: reserve-service
               uri: http://reserve-service:8080
@@ -89,10 +99,10 @@ spring:
               filters:
                 - SetPath=/v3/api-docs
 
-            - id: user-docs
-              uri: http://user-service:8080
+            - id: core-docs
+              uri: http://core-service:8080
               predicates:
-                - Path=/api-docs/user
+                - Path=/api-docs/core
               filters:
                 - SetPath=/v3/api-docs
 

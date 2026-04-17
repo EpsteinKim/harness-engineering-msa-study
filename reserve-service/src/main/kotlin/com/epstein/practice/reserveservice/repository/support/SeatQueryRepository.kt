@@ -28,7 +28,7 @@ class SeatQueryRepository(
                         .select(sub.count())
                         .from(sub)
                         .where(
-                            sub.event.id.eq(eventId),
+                            sub.eventId.eq(eventId),
                             sub.section.eq(seat.section)
                         ),
                     Expressions.constant(0L)
@@ -36,7 +36,7 @@ class SeatQueryRepository(
             )
             .from(seat)
             .where(
-                seat.event.id.eq(eventId),
+                seat.eventId.eq(eventId),
                 seat.status.eq(SeatStatus.AVAILABLE)
             )
             .groupBy(seat.section)

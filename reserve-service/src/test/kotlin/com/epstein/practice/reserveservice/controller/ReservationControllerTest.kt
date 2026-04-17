@@ -2,6 +2,7 @@ package com.epstein.practice.reserveservice.controller
 
 import com.epstein.practice.common.exception.GlobalExceptionHandler
 import com.epstein.practice.common.exception.ServerException
+import com.epstein.practice.reserveservice.dto.MyReservationItem
 import com.epstein.practice.reserveservice.service.ReservationService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -18,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
 class ReservationControllerTest {
@@ -26,14 +28,14 @@ class ReservationControllerTest {
     lateinit var queueService: ReservationService
 
     @Mock
-    lateinit var paymentOrchestrator: com.epstein.practice.reserveservice.service.PaymentOrchestrator
+    lateinit var paymentInitiator: com.epstein.practice.reserveservice.service.PaymentInitiator
 
     lateinit var mockMvc: MockMvc
 
     @BeforeEach
     fun setUp() {
         mockMvc = MockMvcBuilders
-            .standaloneSetup(ReservationController(queueService, paymentOrchestrator))
+            .standaloneSetup(ReservationController(queueService, paymentInitiator))
             .setControllerAdvice(GlobalExceptionHandler())
             .build()
     }
@@ -162,6 +164,63 @@ class ReservationControllerTest {
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.status").value("error"))
                 .andExpect(jsonPath("$.code").value("INVALID_SECTION"))
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/v1/reservations/my - 사용자 예약 이력")
+    inner class GetMyReservations {
+
+        @Test
+        @DisplayName("예약 이력을 반환한다")
+        fun getMyReservations() {
+            `when`(queueService.getMyReservations(1L)).thenReturn(
+                listOf(
+                    MyReservationItem(
+                        eventId = 1L, eventName = "Concert",
+                        eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
+                        seatId = 10L, seatNumber = "A-1", section = "A",
+                        seatStatus = "RESERVED",
+                        priceAmount = 200000L,
+                        paymentId = 100L, paymentStatus = "SUCCEEDED",
+                        reservedAt = LocalDateTime.of(2026, 4, 10, 9, 0)
+                    )
+                )
+            )
+
+            mockMvc.perform(get("/api/v1/reservations/my").param("userId", "1"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].seatId").value(10))
+                .andExpect(jsonPath("$.data[0].seatStatus").value("RESERVED"))
+                .andExpect(jsonPath("$.data[0].paymentStatus").value("SUCCEEDED"))
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/v1/reservations/queue/{eventId}/{userId} - 대기열 순번 조회")
+    inner class GetQueuePosition {
+
+        @Test
+        @DisplayName("대기 중이면 position과 inQueue=true를 반환한다")
+        fun inQueue() {
+            `when`(queueService.getPosition(1L, "1")).thenReturn(3L)
+
+            mockMvc.perform(get("/api/v1/reservations/queue/1/1"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.position").value(3))
+                .andExpect(jsonPath("$.data.inQueue").value(true))
+        }
+
+        @Test
+        @DisplayName("대기열에 없으면 position=null, inQueue=false")
+        fun notInQueue() {
+            `when`(queueService.getPosition(1L, "1")).thenReturn(null)
+
+            mockMvc.perform(get("/api/v1/reservations/queue/1/1"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.position").isEmpty)
+                .andExpect(jsonPath("$.data.inQueue").value(false))
         }
     }
 

@@ -36,8 +36,8 @@ class Payment(
     @Column(nullable = false)
     val amount: Long,
 
-    @Column(nullable = false, length = 20)
-    val method: String,
+    @Column(nullable = true, length = 20)
+    var method: String? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -51,5 +51,5 @@ class Payment(
 )
 
 enum class PaymentStatus {
-    PENDING, SUCCEEDED, FAILED
+    PENDING, SUCCEEDED, FAILED, EXPIRED, CANCELLED
 }

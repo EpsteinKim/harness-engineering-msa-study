@@ -11,8 +11,9 @@ COPY gradle ./gradle
 # 서브모듈 빌드 파일 복사
 COPY common/build.gradle.kts ./common/
 COPY gateway/build.gradle.kts ./gateway/
-COPY user-service/build.gradle.kts ./user-service/
+COPY core-service/build.gradle.kts ./core-service/
 COPY reserve-service/build.gradle.kts ./reserve-service/
+COPY payment-service/build.gradle.kts ./payment-service/
 
 # 의존성만 먼저 다운로드 (소스 변경 시 이 레이어는 캐시됨)
 RUN ./gradlew dependencies --no-daemon || true
