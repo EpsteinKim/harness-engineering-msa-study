@@ -1,6 +1,5 @@
 package com.epstein.practice.reserveservice.dto
 
-import com.epstein.practice.reserveservice.entity.SeatStatus
 import java.time.LocalDateTime
 
 data class EnqueueResponse(
@@ -8,12 +7,9 @@ data class EnqueueResponse(
     val position: Long?
 )
 
-data class ReservationResponse(
-    val userId: String,
-    val eventId: Long,
-    val seatId: Long,
-    val success: Boolean,
-    val message: String
+data class QueuePositionResponse(
+    val position: Long?,
+    val inQueue: Boolean
 )
 
 data class SectionAvailabilityResponse(
@@ -21,13 +17,6 @@ data class SectionAvailabilityResponse(
     val availableCount: Long,
     val totalCount: Long,
     val priceAmount: Long
-)
-
-data class SeatDTO(
-    val id: Long,
-    val seatNumber: String,
-    val section: String,
-    val status: SeatStatus
 )
 
 data class SeatMapEntry(
@@ -38,17 +27,6 @@ data class SeatMapEntry(
     val priceAmount: Long
 )
 
-data class EventSummaryResponse(
-    val id: Long,
-    val name: String,
-    val eventTime: LocalDateTime,
-    val status: String,
-    val ticketOpenTime: LocalDateTime?,
-    val ticketCloseTime: LocalDateTime?,
-    val seatSelectionType: String,
-    val remainingSeats: Long
-)
-
 data class MyReservationItem(
     val eventId: Long,
     val eventName: String,
@@ -56,6 +34,7 @@ data class MyReservationItem(
     val seatId: Long,
     val seatNumber: String,
     val section: String,
+    val seatStatus: String,
     val priceAmount: Long,
     val paymentId: Long?,
     val paymentStatus: String?,

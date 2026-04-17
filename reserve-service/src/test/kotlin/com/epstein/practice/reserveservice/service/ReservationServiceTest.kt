@@ -3,11 +3,14 @@ package com.epstein.practice.reserveservice.service
 import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.reserveservice.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.cache.QueueCacheRepository
+import com.epstein.practice.reserveservice.client.PaymentClient
+import com.epstein.practice.reserveservice.client.PaymentSummary
 import com.epstein.practice.reserveservice.client.UserClient
-import com.epstein.practice.reserveservice.entity.Event
-import com.epstein.practice.reserveservice.entity.EventStatus
-import com.epstein.practice.reserveservice.repository.EventRepository
-import com.epstein.practice.reserveservice.scheduler.DynamicScheduler
+import com.epstein.practice.reserveservice.entity.Seat
+import com.epstein.practice.reserveservice.entity.SeatStatus
+import com.epstein.practice.reserveservice.config.KafkaConfig
+import com.epstein.practice.reserveservice.event.EnqueueMessage
+import com.epstein.practice.reserveservice.repository.SeatRepository
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -21,8 +24,8 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.kafka.core.KafkaTemplate
 import java.time.LocalDateTime
-import java.util.Optional
 
 @ExtendWith(MockitoExtension::class)
 class ReservationServiceTest {
@@ -37,32 +40,34 @@ class ReservationServiceTest {
     lateinit var seatService: SeatService
 
     @Mock
-    lateinit var eventRepository: EventRepository
-
-    @Mock
-    lateinit var dynamicScheduler: DynamicScheduler
+    lateinit var seatRepository: SeatRepository
 
     @Mock
     lateinit var userClient: UserClient
+
+    @Mock
+    lateinit var paymentClient: PaymentClient
+
+    @Mock
+    lateinit var kafkaTemplate: KafkaTemplate<String, Any>
 
     private lateinit var service: ReservationService
 
     @BeforeEach
     fun setUp() {
-        service = ReservationService(eventCache, queueCache, seatService, eventRepository, userClient, dynamicScheduler, 600000L)
+        service = ReservationService(
+            eventCache, queueCache, seatService, seatRepository,
+            userClient, paymentClient, kafkaTemplate
+        )
         lenient().`when`(userClient.exists(anyLong())).thenReturn(true)
     }
-
-    private fun openEvent(id: Long = 1L, closeTime: LocalDateTime? = LocalDateTime.now().plusHours(1)): Event =
-        Event(id = id, name = "e", eventTime = LocalDateTime.now().plusDays(1),
-            status = EventStatus.OPEN, ticketCloseTime = closeTime)
 
     @Nested
     @DisplayName("enqueue - 대기열에 추가")
     inner class Enqueue {
 
         @Test
-        @DisplayName("이벤트가 열려있으면 좌석 ID로 대기열에 추가한다")
+        @DisplayName("이벤트가 열려있으면 좌석 ID로 대기열에 추가하고 Kafka 발행한다")
         fun enqueueBySeatId() {
             `when`(eventCache.exists(1L)).thenReturn(true)
             `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
@@ -74,6 +79,7 @@ class ReservationServiceTest {
             service.enqueue("1", 1L, seatId = 10L)
 
             verify(queueCache).addToQueue(anyLong(), anyString(), anyDouble())
+            verify(kafkaTemplate).send(eq(KafkaConfig.TOPIC_QUEUE) ?: "", anyString(), any<EnqueueMessage>() ?: EnqueueMessage(0, "", joinedAt = 0))
         }
 
         @Test
@@ -109,8 +115,6 @@ class ReservationServiceTest {
         @DisplayName("SEAT_PICK에서 이미 대기열에 있으면 tryHoldSeat가 호출되지 않고 ALREADY_IN_QUEUE 예외")
         fun enqueueSeatPickAlreadyInQueueSkipsHold() {
             `when`(eventCache.exists(1L)).thenReturn(true)
-            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
-            `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SEAT_PICK")
             `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
 
             val exception = assertThrows(ServerException::class.java) {
@@ -192,9 +196,6 @@ class ReservationServiceTest {
         @DisplayName("이미 대기열에 있는 유저는 ALREADY_IN_QUEUE 예외를 발생시킨다")
         fun enqueueAlreadyInQueue() {
             `when`(eventCache.exists(1L)).thenReturn(true)
-            `when`(eventCache.getRemainingSeats(1L)).thenReturn(100L)
-            `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
-            `when`(eventCache.getSectionAvailable(1L, "A")).thenReturn(5L)
             `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
 
             val exception = assertThrows(ServerException::class.java) {
@@ -226,51 +227,15 @@ class ReservationServiceTest {
     }
 
     @Nested
-    @DisplayName("peekWaiting - 대기열 조회")
-    inner class PeekWaiting {
-
-        @Test
-        @DisplayName("대기열에서 지정 수만큼 조회한다")
-        fun peekWaitingReturnsUsers() {
-            `when`(queueCache.peekQueue(1L, 3)).thenReturn(setOf("1", "2"))
-            assertEquals(setOf("1", "2"), service.peekWaiting(1L, 3))
-        }
-    }
-
-    @Nested
     @DisplayName("removeFromWaiting - 대기열에서 제거")
     inner class RemoveFromWaiting {
 
         @Test
-        @DisplayName("대기열에서 유저를 제거하고 메타데이터를 삭제한다")
+        @DisplayName("대기열에서 유저를 제거하고 hold를 해제한다")
         fun removeFromWaitingSuccess() {
             service.removeFromWaiting(1L, "1")
             verify(queueCache).removeFromQueue(1L, "1")
-            verify(queueCache).deleteMetadata(1L, "1")
-        }
-    }
-
-    @Nested
-    @DisplayName("getRequestData - 요청 메타데이터 조회")
-    inner class GetRequestData {
-
-        @Test
-        @DisplayName("seatId가 포함된 요청 데이터를 반환한다")
-        fun getRequestDataWithSeatId() {
-            `when`(queueCache.getMetadata(1L, "1")).thenReturn(mapOf("seatId" to "10"))
-
-            val data = service.getRequestData(1L, "1")
-
-            assertNotNull(data)
-            assertEquals(1L, data!!.eventId)
-            assertEquals(10L, data.seatId)
-        }
-
-        @Test
-        @DisplayName("데이터가 없으면 null을 반환한다")
-        fun getRequestDataEmpty() {
-            `when`(queueCache.getMetadata(1L, "1")).thenReturn(emptyMap())
-            assertNull(service.getRequestData(1L, "1"))
+            verify(queueCache).releaseHeldSeat(1L, "1")
         }
     }
 
@@ -286,75 +251,30 @@ class ReservationServiceTest {
                 .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
 
             assertTrue(service.cancel(1L, "1"))
-            verify(queueCache).deleteMetadata(1L, "1")
+            verify(queueCache).releaseHeldSeat(1L, "1")
             verify(eventCache, never()).adjustSeatCounts(anyLong(), anyLong(), anyString())
         }
 
         @Test
-        @DisplayName("좌석이 이미 예약된 상태에서 취소하면 좌석 해제 + remainingSeats 증가 + 스케줄러 재가동")
+        @DisplayName("좌석이 이미 예약된 상태에서 취소하면 좌석 해제 + remainingSeats 증가")
         fun cancelWithReservedSeat() {
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
             `when`(seatService.releaseSeat(1L, 1L))
                 .thenReturn(ReservationResult(1L, 1L, 10L, true, "seat released", "A"))
-            `when`(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()))
 
             assertTrue(service.cancel(1L, "1"))
             verify(eventCache).adjustSeatCounts(1L, 1, "A")
-            verify(dynamicScheduler).startProcessing(1L)
         }
 
         @Test
-        @DisplayName("판매 마감 시각이 지났으면 스케줄러 재가동하지 않음")
-        fun cancelAfterTicketClose() {
-            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
-            `when`(seatService.releaseSeat(1L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 10L, true, "seat released", "A"))
-            `when`(eventRepository.findById(1L))
-                .thenReturn(Optional.of(openEvent(closeTime = LocalDateTime.now().minusMinutes(1))))
-
-            assertTrue(service.cancel(1L, "1"))
-            verify(eventCache).adjustSeatCounts(1L, 1, "A")
-            verify(dynamicScheduler, never()).startProcessing(anyLong())
-        }
-
-        @Test
-        @DisplayName("이벤트가 CLOSED면 스케줄러 재가동하지 않음")
-        fun cancelForClosedEvent() {
-            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
-            `when`(seatService.releaseSeat(1L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 10L, true, "seat released", "A"))
-            `when`(eventRepository.findById(1L)).thenReturn(
-                Optional.of(
-                    Event(id = 1L, name = "e", eventTime = LocalDateTime.now().plusDays(1),
-                        status = EventStatus.CLOSED, ticketCloseTime = LocalDateTime.now().plusHours(1))
-                )
-            )
-
-            assertTrue(service.cancel(1L, "1"))
-            verify(dynamicScheduler, never()).startProcessing(anyLong())
-        }
-
-        @Test
-        @DisplayName("이벤트 조회 결과가 없으면 스케줄러 재가동하지 않음")
-        fun cancelWithMissingEvent() {
-            `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
-            `when`(seatService.releaseSeat(1L, 1L))
-                .thenReturn(ReservationResult(1L, 1L, 10L, true, "seat released", "A"))
-            `when`(eventRepository.findById(1L)).thenReturn(Optional.empty())
-
-            assertTrue(service.cancel(1L, "1"))
-            verify(dynamicScheduler, never()).startProcessing(anyLong())
-        }
-
-        @Test
-        @DisplayName("좌석 해제 실패면 스케줄러 재가동하지 않음")
+        @DisplayName("좌석 해제 실패면 adjustSeatCounts 호출하지 않음")
         fun cancelWithoutSeatRelease() {
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
             `when`(seatService.releaseSeat(1L, 1L))
                 .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
 
             assertTrue(service.cancel(1L, "1"))
-            verify(dynamicScheduler, never()).startProcessing(anyLong())
+            verify(eventCache, never()).adjustSeatCounts(anyLong(), anyLong(), anyString())
         }
 
         @Test
@@ -368,9 +288,9 @@ class ReservationServiceTest {
         }
 
         @Test
-        @DisplayName("metadata에 seatId가 있으면 releaseHold가 호출된다")
+        @DisplayName("hold된 좌석이 있으면 releaseHold가 호출된다")
         fun cancelReleasesHoldWhenSeatIdPresent() {
-            `when`(queueCache.getMetadata(1L, "1")).thenReturn(mapOf("seatId" to "10"))
+            `when`(queueCache.getHeldSeatId(1L, "1")).thenReturn(10L)
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
             `when`(seatService.releaseSeat(1L, 1L))
                 .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
@@ -381,9 +301,9 @@ class ReservationServiceTest {
         }
 
         @Test
-        @DisplayName("metadata에 seatId가 없으면 releaseHold가 호출되지 않는다")
+        @DisplayName("hold된 좌석이 없으면 releaseHold가 호출되지 않는다")
         fun cancelNoReleaseHoldWhenNoSeatId() {
-            `when`(queueCache.getMetadata(1L, "1")).thenReturn(mapOf("section" to "A"))
+            `when`(queueCache.getHeldSeatId(1L, "1")).thenReturn(null)
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
             `when`(seatService.releaseSeat(1L, 1L))
                 .thenReturn(ReservationResult(1L, 1L, 0, false, "no reserved seat for user"))
@@ -410,6 +330,71 @@ class ReservationServiceTest {
         fun getPositionNotFound() {
             `when`(queueCache.getQueuePosition(1L, "1")).thenReturn(null)
             assertNull(service.getPosition(1L, "1"))
+        }
+    }
+
+    @Nested
+    @DisplayName("getMyReservations - 사용자 예약 이력")
+    inner class GetMyReservations {
+
+        @Test
+        @DisplayName("좌석과 결제 정보 조합해 반환")
+        fun withPayment() {
+            val seat = Seat(
+                id = 10L, eventId = 1L, seatNumber = "A-1", section = "A",
+                status = SeatStatus.RESERVED, userId = 1L, priceAmount = 200000L,
+                reservedAt = LocalDateTime.of(2026, 4, 10, 9, 0)
+            )
+            `when`(eventCache.getAllFields(1L)).thenReturn(mapOf(
+                "name" to "Concert",
+                "eventTime" to "2026-05-01T19:00"
+            ))
+            `when`(seatRepository.findActiveByUserId(1L)).thenReturn(listOf(seat))
+            `when`(paymentClient.listByUser(1L)).thenReturn(
+                listOf(PaymentSummary(id = 100L, seatId = 10L, status = "SUCCEEDED"))
+            )
+
+            val result = service.getMyReservations(1L)
+
+            assertEquals(1, result.size)
+            assertEquals(10L, result[0].seatId)
+            assertEquals("RESERVED", result[0].seatStatus)
+            assertEquals(100L, result[0].paymentId)
+            assertEquals("SUCCEEDED", result[0].paymentStatus)
+            assertEquals(200000L, result[0].priceAmount)
+        }
+
+        @Test
+        @DisplayName("좌석 없으면 payment-service 호출 없이 빈 리스트")
+        fun noSeats() {
+            `when`(seatRepository.findActiveByUserId(1L)).thenReturn(emptyList())
+
+            val result = service.getMyReservations(1L)
+
+            assertTrue(result.isEmpty())
+            verify(paymentClient, never()).listByUser(anyLong())
+        }
+
+        @Test
+        @DisplayName("결제 정보 없으면 paymentId/paymentStatus null")
+        fun noPayment() {
+            val seat = Seat(
+                id = 10L, eventId = 1L, seatNumber = "A-1", section = "A",
+                status = SeatStatus.PAYMENT_PENDING, userId = 1L, priceAmount = 200000L
+            )
+            `when`(eventCache.getAllFields(1L)).thenReturn(mapOf(
+                "name" to "Concert",
+                "eventTime" to "2026-05-01T19:00"
+            ))
+            `when`(seatRepository.findActiveByUserId(1L)).thenReturn(listOf(seat))
+            `when`(paymentClient.listByUser(1L)).thenReturn(emptyList())
+
+            val result = service.getMyReservations(1L)
+
+            assertEquals(1, result.size)
+            assertEquals("PAYMENT_PENDING", result[0].seatStatus)
+            assertNull(result[0].paymentId)
+            assertNull(result[0].paymentStatus)
         }
     }
 }

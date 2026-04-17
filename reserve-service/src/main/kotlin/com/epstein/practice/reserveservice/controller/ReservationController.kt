@@ -4,23 +4,28 @@ import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.common.response.ApiResponse
 import com.epstein.practice.reserveservice.constant.ErrorCode
 import com.epstein.practice.reserveservice.dto.EnqueueResponse
+import com.epstein.practice.reserveservice.dto.MyReservationItem
 import com.epstein.practice.reserveservice.dto.PaymentRequest
+import com.epstein.practice.reserveservice.dto.QueuePositionResponse
 import com.epstein.practice.reserveservice.dto.ReservationRequest
-import com.epstein.practice.reserveservice.service.PaymentOrchestrationResult
-import com.epstein.practice.reserveservice.service.PaymentOrchestrator
+import com.epstein.practice.reserveservice.service.PaymentInitiator
 import com.epstein.practice.reserveservice.service.ReservationService
+import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/v1/reservations")
 class ReservationController(
     private val reserveService: ReservationService,
-    private val paymentOrchestrator: PaymentOrchestrator
+    private val paymentInitiator: PaymentInitiator
 ) {
     @PostMapping
     fun enqueue(@RequestBody request: ReservationRequest): ApiResponse<EnqueueResponse> {
@@ -45,6 +50,21 @@ class ReservationController(
         )
     }
 
+    @GetMapping("/queue/{eventId}/{userId}")
+    fun getQueuePosition(
+        @PathVariable eventId: Long,
+        @PathVariable userId: String
+    ): ApiResponse<QueuePositionResponse> {
+        val position = reserveService.getPosition(eventId, userId)
+        val inQueue = position != null && position >= 0
+        return ApiResponse.success(
+            data = QueuePositionResponse(
+                position = if (inQueue) position else null,
+                inQueue = inQueue
+            )
+        )
+    }
+
     @DeleteMapping("/queue/{eventId}/{userId}")
     fun cancel(@PathVariable eventId: Long, @PathVariable userId: String): ApiResponse<String> {
         val cancelled = reserveService.cancel(eventId, userId)
@@ -55,12 +75,20 @@ class ReservationController(
     }
 
     @PostMapping("/pay")
-    fun pay(@RequestBody request: PaymentRequest): ApiResponse<PaymentOrchestrationResult> {
-        val result = paymentOrchestrator.pay(
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun pay(@RequestBody request: PaymentRequest): ApiResponse<Map<String, Long>> {
+        val seatId = paymentInitiator.requestPayment(
             eventId = request.eventId,
             userId = request.userId,
             method = request.method
         )
-        return ApiResponse.success(data = result, message = result.message)
+        return ApiResponse.success(
+            data = mapOf("seatId" to seatId),
+            message = "결제 요청이 접수되었습니다. 최종 상태는 /my 또는 /queue로 확인하세요"
+        )
     }
+
+    @GetMapping("/my")
+    fun getMyReservations(@RequestParam userId: Long): ApiResponse<List<MyReservationItem>> =
+        ApiResponse.success(data = reserveService.getMyReservations(userId))
 }

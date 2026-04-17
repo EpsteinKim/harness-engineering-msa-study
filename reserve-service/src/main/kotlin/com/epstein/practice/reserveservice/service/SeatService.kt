@@ -1,14 +1,16 @@
 package com.epstein.practice.reserveservice.service
 
 import com.epstein.practice.reserveservice.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.config.CacheConfig.Companion.SEAT_MAP_CACHE
 import com.epstein.practice.reserveservice.constant.parseSeatValue
-import com.epstein.practice.reserveservice.constant.sectionAvailableField
-import com.epstein.practice.reserveservice.constant.sectionPriceField
-import com.epstein.practice.reserveservice.constant.sectionTotalField
+import com.epstein.practice.common.cache.sectionAvailableField
+import com.epstein.practice.common.cache.sectionPriceField
+import com.epstein.practice.common.cache.sectionTotalField
 import com.epstein.practice.reserveservice.dto.SeatMapEntry
 import com.epstein.practice.reserveservice.dto.SectionAvailabilityResponse
 import com.epstein.practice.reserveservice.entity.SeatStatus
 import com.epstein.practice.reserveservice.repository.SeatRepository
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -61,6 +63,7 @@ class SeatService(
         return ReservationResult(userId, eventId, seat.id, true, "seat released", seat.section)
     }
 
+    @Cacheable(cacheNames = [SEAT_MAP_CACHE], key = "#eventId + ':' + (#section ?: 'ALL')")
     fun getSeatMap(eventId: Long, section: String? = null): List<SeatMapEntry> {
         val raw = eventCache.getAllSeatFields(eventId)
         if (raw.isEmpty()) return emptyList()

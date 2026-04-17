@@ -2,52 +2,21 @@ package com.epstein.practice.paymentservice.service
 
 import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.paymentservice.constant.ErrorCode
-import com.epstein.practice.paymentservice.constant.PaymentMethod
-import com.epstein.practice.paymentservice.dto.PaymentRequest
 import com.epstein.practice.paymentservice.entity.Payment
 import com.epstein.practice.paymentservice.entity.PaymentStatus
 import com.epstein.practice.paymentservice.repository.PaymentRepository
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.LocalDateTime
-import kotlin.random.Random
 
+/**
+ * 조회 + PENDING 생성 전용. 실제 결제 처리는 PaymentProcessingService가 이벤트 구동으로 수행.
+ */
 @Service
 class PaymentService(
     private val paymentRepository: PaymentRepository,
-    @Value("\${payment.success-rate:0.7}") private val successRate: Double,
-    private val random: Random = Random.Default
 ) {
     private val logger = LoggerFactory.getLogger(PaymentService::class.java)
-
-    @Transactional
-    fun processPayment(request: PaymentRequest): Payment {
-        if (request.method !in PaymentMethod.ALL) {
-            throw ServerException(message = "지원하지 않는 결제 수단입니다", code = ErrorCode.INVALID_METHOD)
-        }
-
-        val payment = paymentRepository.save(
-            Payment(
-                seatId = request.seatId,
-                userId = request.userId,
-                eventId = request.eventId,
-                amount = request.amount,
-                method = request.method,
-                status = PaymentStatus.PENDING
-            )
-        )
-
-        val success = random.nextDouble() < successRate
-        payment.status = if (success) PaymentStatus.SUCCEEDED else PaymentStatus.FAILED
-        payment.completedAt = LocalDateTime.now()
-
-        logger.info("Payment processed: id={}, seatId={}, userId={}, status={}",
-            payment.id, payment.seatId, payment.userId, payment.status)
-
-        return payment
-    }
 
     fun getById(id: Long): Payment =
         paymentRepository.findById(id).orElseThrow {
@@ -56,4 +25,30 @@ class PaymentService(
 
     fun getByUserId(userId: Long): List<Payment> =
         paymentRepository.findByUserIdOrderByCreatedAtDesc(userId)
+
+    /**
+     * 좌석 HOLD 이벤트(SeatHeld)를 받아 Payment(PENDING)를 생성한다.
+     * 멱등성: 동일 seatId에 대해 PENDING이 이미 있으면 skip.
+     */
+    @Transactional
+    fun createPendingForSeat(seatId: Long, userId: Long, eventId: Long, amount: Long): Payment {
+        paymentRepository.findBySeatIdAndStatus(seatId, PaymentStatus.PENDING)?.let { existing ->
+            logger.info("Pending payment already exists for seat={}, skipping", seatId)
+            return existing
+        }
+
+        val payment = paymentRepository.save(
+            Payment(
+                seatId = seatId,
+                userId = userId,
+                eventId = eventId,
+                amount = amount,
+                method = null,
+                status = PaymentStatus.PENDING
+            )
+        )
+        logger.info("Pending payment created: id={}, seatId={}, userId={}, amount={}",
+            payment.id, seatId, userId, amount)
+        return payment
+    }
 }

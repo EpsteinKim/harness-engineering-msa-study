@@ -3,7 +3,6 @@ package com.epstein.practice.paymentservice.controller
 import com.epstein.practice.common.exception.GlobalExceptionHandler
 import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.paymentservice.constant.ErrorCode
-import com.epstein.practice.paymentservice.dto.PaymentRequest
 import com.epstein.practice.paymentservice.entity.Payment
 import com.epstein.practice.paymentservice.entity.PaymentStatus
 import com.epstein.practice.paymentservice.service.PaymentService
@@ -14,7 +13,6 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
-import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
@@ -35,29 +33,6 @@ class PaymentControllerTest {
             .standaloneSetup(PaymentController(paymentService))
             .setControllerAdvice(GlobalExceptionHandler())
             .build()
-    }
-
-    @Test
-    @DisplayName("POST /api/v1/payments - SUCCEEDED 응답")
-    fun processSucceeded() {
-        val payment = Payment(
-            id = 1L, seatId = 10L, userId = 1L, eventId = 1L,
-            amount = 10000L, method = "CARD",
-            status = PaymentStatus.SUCCEEDED,
-            completedAt = LocalDateTime.now()
-        )
-        `when`(paymentService.processPayment(
-            PaymentRequest(userId = 1L, seatId = 10L, eventId = 1L, amount = 10000L, method = "CARD")
-        )).thenReturn(payment)
-
-        mockMvc.perform(
-            post("/api/v1/payments")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"userId":1,"seatId":10,"eventId":1,"amount":10000,"method":"CARD"}""")
-        )
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.data.status").value("SUCCEEDED"))
-            .andExpect(jsonPath("$.data.id").value(1))
     }
 
     @Test

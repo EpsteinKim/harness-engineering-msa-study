@@ -10,7 +10,7 @@ data class PaymentResponse(
     val userId: Long,
     val eventId: Long,
     val amount: Long,
-    val method: String,
+    val method: String?,
     val createdAt: LocalDateTime,
     val completedAt: LocalDateTime?
 ) {

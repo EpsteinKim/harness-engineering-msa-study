@@ -1,6 +1,5 @@
 package com.epstein.practice.reserveservice.cache
 
-import com.epstein.practice.reserveservice.constant.metadataKey
 import com.epstein.practice.reserveservice.constant.waitingKey
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Repository
@@ -26,25 +25,23 @@ class QueueCacheRepository(
         return zSetOps.score(waitingKey(eventId), userId) != null
     }
 
-    fun peekQueue(eventId: Long, count: Long): Set<String> {
-        return zSetOps.range(waitingKey(eventId), 0, count - 1) ?: emptySet()
-    }
-
     fun getQueuePosition(eventId: Long, userId: String): Long? {
         return zSetOps.rank(waitingKey(eventId), userId)
     }
 
-    // === Request Metadata ===
+    // === Seat Hold (SEAT_PICK 전용) ===
 
-    fun saveMetadata(eventId: Long, userId: String, metadata: Map<String, String>) {
-        hashOps.putAll(metadataKey(eventId, userId), metadata)
+    fun holdSeat(eventId: Long, userId: String, seatId: Long) {
+        hashOps.put(seatHeldKey(eventId), userId, seatId.toString())
     }
 
-    fun getMetadata(eventId: Long, userId: String): Map<String, String> {
-        return hashOps.entries(metadataKey(eventId, userId))
+    fun getHeldSeatId(eventId: Long, userId: String): Long? {
+        return hashOps.get(seatHeldKey(eventId), userId)?.toLongOrNull()
     }
 
-    fun deleteMetadata(eventId: Long, userId: String) {
-        redis.delete(metadataKey(eventId, userId))
+    fun releaseHeldSeat(eventId: Long, userId: String) {
+        hashOps.delete(seatHeldKey(eventId), userId)
     }
+
+    private fun seatHeldKey(eventId: Long) = "seat_held:$eventId"
 }

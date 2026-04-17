@@ -1,7 +1,6 @@
 package com.epstein.practice.reserveservice.service
 
 import com.epstein.practice.reserveservice.cache.EventCacheRepository
-import com.epstein.practice.reserveservice.entity.Event
 import com.epstein.practice.reserveservice.entity.Seat
 import com.epstein.practice.reserveservice.entity.SeatStatus
 import com.epstein.practice.reserveservice.repository.SeatRepository
@@ -27,16 +26,14 @@ class SeatServiceTest {
 
     private lateinit var seatService: SeatService
 
-    private lateinit var event: Event
     private lateinit var availableSeat: Seat
 
     @BeforeEach
     fun setUp() {
         seatService = SeatService(seatRepository, eventCache)
-        event = Event(id = 1L, name = "Concert", eventTime = LocalDateTime.of(2026, 5, 1, 19, 0))
         availableSeat = Seat(
             id = 10L,
-            event = event,
+            eventId = 1L,
             seatNumber = "A-1",
             section = "A",
             status = SeatStatus.AVAILABLE
@@ -79,7 +76,7 @@ class SeatServiceTest {
         @DisplayName("실패 - 이미 예약된 좌석이면 실패를 반환한다")
         fun reserveSeatAlreadyReserved() {
             val reservedSeat = Seat(
-                id = 10L, event = event, seatNumber = "A-1", section = "A",
+                id = 10L, eventId = 1L, seatNumber = "A-1", section = "A",
                 status = SeatStatus.RESERVED, userId = 2L
             )
             `when`(seatRepository.findByEventIdAndId(1L, 10L)).thenReturn(reservedSeat)
@@ -132,7 +129,7 @@ class SeatServiceTest {
         @DisplayName("성공 - 예약된 좌석을 해제한다")
         fun releaseSeatSuccess() {
             val reservedSeat = Seat(
-                id = 10L, event = event, seatNumber = "A-1", section = "A",
+                id = 10L, eventId = 1L, seatNumber = "A-1", section = "A",
                 status = SeatStatus.RESERVED, userId = 1L
             )
             `when`(seatRepository.findByEventIdAndUserId(1L, 1L)).thenReturn(reservedSeat)

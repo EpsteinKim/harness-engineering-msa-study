@@ -63,13 +63,6 @@ class QueueCacheRepositoryTest {
         }
 
         @Test
-        @DisplayName("대기열 상위 N명을 조회한다")
-        fun peekQueue() {
-            `when`(zSetOps.range("reservation:waiting:1", 0, 9)).thenReturn(setOf("1", "2"))
-            assertEquals(setOf("1", "2"), queueCache.peekQueue(1L, 10))
-        }
-
-        @Test
         @DisplayName("대기열 위치를 조회한다")
         fun getQueuePosition() {
             `when`(zSetOps.rank("reservation:waiting:1", "1")).thenReturn(3L)
@@ -78,30 +71,35 @@ class QueueCacheRepositoryTest {
     }
 
     @Nested
-    @DisplayName("Request Metadata")
-    inner class Metadata {
+    @DisplayName("Seat Hold")
+    inner class SeatHold {
 
         @Test
-        @DisplayName("메타데이터를 저장한다")
-        fun saveMetadata() {
-            val data = mapOf("seatId" to "10")
-            queueCache.saveMetadata(1L, "1", data)
-            verify(hashOps).putAll("reservation:metadata:1:1", data)
+        @DisplayName("좌석 hold를 저장한다")
+        fun holdSeat() {
+            queueCache.holdSeat(1L, "1", 10L)
+            verify(hashOps).put("seat_held:1", "1", "10")
         }
 
         @Test
-        @DisplayName("메타데이터를 조회한다")
-        fun getMetadata() {
-            `when`(hashOps.entries("reservation:metadata:1:1"))
-                .thenReturn(mapOf("seatId" to "10"))
-            assertEquals(mapOf("seatId" to "10"), queueCache.getMetadata(1L, "1"))
+        @DisplayName("hold된 좌석 ID를 조회한다")
+        fun getHeldSeatId() {
+            `when`(hashOps.get("seat_held:1", "1")).thenReturn("10")
+            assertEquals(10L, queueCache.getHeldSeatId(1L, "1"))
         }
 
         @Test
-        @DisplayName("메타데이터를 삭제한다")
-        fun deleteMetadata() {
-            queueCache.deleteMetadata(1L, "1")
-            verify(redis).delete("reservation:metadata:1:1")
+        @DisplayName("hold된 좌석이 없으면 null을 반환한다")
+        fun getHeldSeatIdNull() {
+            `when`(hashOps.get("seat_held:1", "1")).thenReturn(null)
+            assertNull(queueCache.getHeldSeatId(1L, "1"))
+        }
+
+        @Test
+        @DisplayName("좌석 hold를 해제한다")
+        fun releaseHeldSeat() {
+            queueCache.releaseHeldSeat(1L, "1")
+            verify(hashOps).delete("seat_held:1", "1")
         }
     }
 }

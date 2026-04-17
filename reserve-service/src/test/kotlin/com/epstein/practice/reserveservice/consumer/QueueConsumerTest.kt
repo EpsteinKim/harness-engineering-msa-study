@@ -1,0 +1,118 @@
+package com.epstein.practice.reserveservice.consumer
+
+import com.epstein.practice.common.event.SeatHeld
+import com.epstein.practice.reserveservice.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.cache.QueueCacheRepository
+import com.epstein.practice.reserveservice.config.KafkaConfig
+import com.epstein.practice.reserveservice.event.EnqueueMessage
+import com.epstein.practice.reserveservice.service.ReservationResult
+import com.epstein.practice.reserveservice.service.ReservationService
+import com.epstein.practice.reserveservice.service.SeatService
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.eq
+import org.mockito.Mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
+import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.kafka.core.KafkaTemplate
+import org.springframework.orm.ObjectOptimisticLockingFailureException
+
+@ExtendWith(MockitoExtension::class)
+class QueueConsumerTest {
+
+    @Mock lateinit var reserveService: ReservationService
+    @Mock lateinit var seatService: SeatService
+    @Mock lateinit var eventCache: EventCacheRepository
+    @Mock lateinit var queueCache: QueueCacheRepository
+    @Mock lateinit var kafkaTemplate: KafkaTemplate<String, Any>
+
+    private lateinit var consumer: QueueConsumer
+
+    @BeforeEach
+    fun setUp() {
+        consumer = QueueConsumer(reserveService, seatService, eventCache, queueCache, kafkaTemplate)
+    }
+
+    private fun msg(section: String? = "A", seatId: Long? = null) =
+        EnqueueMessage(eventId = 1L, userId = "1", seatId = seatId, section = section, joinedAt = 0L)
+
+    @Test
+    @DisplayName("좌석 없음이면 유저 드롭, seatService 호출하지 않음")
+    fun noRemainingSeats() {
+        `when`(eventCache.getRemainingSeats(1L)).thenReturn(0L)
+
+        consumer.onMessage(msg())
+
+        verify(reserveService).removeFromWaiting(1L, "1")
+        verify(seatService, never()).reserveBySection(anyLong(), anyString(), anyLong())
+    }
+
+    @Test
+    @DisplayName("큐에 없는 유저는 정리만 하고 종료")
+    fun userNotInQueue() {
+        `when`(eventCache.getRemainingSeats(1L)).thenReturn(10L)
+        `when`(queueCache.isInQueue(1L, "1")).thenReturn(false)
+
+        consumer.onMessage(msg())
+
+        verify(reserveService).removeFromWaiting(1L, "1")
+        verify(seatService, never()).reserveBySection(anyLong(), anyString(), anyLong())
+    }
+
+    @Test
+    @DisplayName("SECTION_SELECT 성공: 좌석 배정 + remainingSeats 조정 + SeatHeld 발행")
+    fun sectionSuccess() {
+        `when`(eventCache.getRemainingSeats(1L)).thenReturn(10L)
+        `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+        `when`(seatService.reserveBySection(1L, "A", 1L))
+            .thenReturn(ReservationResult(1L, 1L, 100L, true, "seat A-1 reserved", "A"))
+        `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SECTION_SELECT")
+        `when`(eventCache.getSeatPrice(1L, 100L)).thenReturn(200_000L)
+
+        consumer.onMessage(msg())
+
+        verify(eventCache).adjustSeatCounts(1L, -1, "A")
+        verify(eventCache, never()).markSeatReserved(anyLong(), anyLong())
+        verify(reserveService).removeFromWaiting(1L, "1")
+        verify(kafkaTemplate).send(eq(KafkaConfig.TOPIC_SEAT_EVENTS) ?: "", eq("100") ?: "", any<SeatHeld>() ?: SeatHeld(0, 0, 0, "", 0, 0))
+    }
+
+    @Test
+    @DisplayName("SEAT_PICK 성공: markSeatReserved + SeatHeld 발행")
+    fun seatPickSuccess() {
+        `when`(eventCache.getRemainingSeats(1L)).thenReturn(10L)
+        `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+        `when`(seatService.reserveBySeatId(1L, 99L, 1L))
+            .thenReturn(ReservationResult(1L, 1L, 99L, true, "ok", "A"))
+        `when`(eventCache.getSeatSelectionType(1L)).thenReturn("SEAT_PICK")
+        `when`(eventCache.getSeatPrice(1L, 99L)).thenReturn(150_000L)
+
+        consumer.onMessage(msg(section = null, seatId = 99L))
+
+        verify(eventCache).adjustSeatCounts(1L, -1, "A")
+        verify(eventCache).markSeatReserved(1L, 99L)
+        verify(kafkaTemplate).send(eq(KafkaConfig.TOPIC_SEAT_EVENTS) ?: "", eq("99") ?: "", any<SeatHeld>() ?: SeatHeld(0, 0, 0, "", 0, 0))
+    }
+
+    @Test
+    @DisplayName("낙관적 락 충돌 시 HOLD 해제 후 드롭")
+    fun optimisticLockReleasesHold() {
+        `when`(eventCache.getRemainingSeats(1L)).thenReturn(10L)
+        `when`(queueCache.isInQueue(1L, "1")).thenReturn(true)
+        `when`(seatService.reserveBySeatId(1L, 99L, 1L))
+            .thenThrow(ObjectOptimisticLockingFailureException("Seat", 99L))
+
+        consumer.onMessage(msg(section = null, seatId = 99L))
+
+        verify(eventCache).releaseHold(1L, 99L, "1")
+        verify(reserveService).removeFromWaiting(1L, "1")
+        verify(eventCache, never()).adjustSeatCounts(anyLong(), anyLong(), anyString())
+    }
+}
