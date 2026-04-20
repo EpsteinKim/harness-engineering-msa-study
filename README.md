@@ -17,8 +17,8 @@ MSA(Microservice Architecture) + 대용량 트래픽 실습을 위한 대기열(
 | Phase | 구성 | 상태 |
 |-------|------|------|
 | Phase 1 | Queue Service 단독 | 완료 |
-| Phase 2 | Gateway + Reserve + Core + Payment + Kafka + Redis | 진행중 |
-| Phase 3 | Kubernetes 전환 (HPA, replicas) | 계획 |
+| Phase 2 | Gateway + Reserve + Core + Payment + Kafka + Redis | 완료 |
+| Phase 3 | Kubernetes 전환 (minikube, HPA, Ingress) | 진행중 |
 
 ### 서비스 구성 (Phase 2)
 
@@ -69,6 +69,12 @@ docker compose logs -f reserve-service
 
 # 테스트
 ./gradlew test
+
+# Kubernetes (minikube) 배포
+minikube start --cpus=4 --memory=8192
+minikube addons enable ingress
+minikube addons enable metrics-server
+./kubernetes/scripts/deploy.sh
 ```
 
 ## Project Structure
@@ -79,6 +85,7 @@ docker compose logs -f reserve-service
 ├── reserve-service/   # 좌석 예약 + 대기열 (핫패스)
 ├── core-service/      # 이벤트 라이프사이클 + 유저 관리 (콜드패스)
 ├── payment-service/   # 결제 처리
+├── kubernetes/        # K8s 매니페스트 (Deployment, Service, HPA, Ingress)
 └── docs/              # 문서 (설계, 명세, 학습)
 ```
 
