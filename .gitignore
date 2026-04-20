@@ -43,9 +43,7 @@ out/
 
 ### Environment ###
 .env
-**/database.properties
-# .sample은 커밋 대상
-!**/database.properties.sample
+!.env.sample
 
 ### Kubernetes Secrets ###
 kubernetes/config/db-secret.yaml

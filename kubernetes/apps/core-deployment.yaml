@@ -41,8 +41,6 @@ spec:
                 secretKeyRef:
                   name: db-credentials
                   key: CORE_DB_PASSWORD
-            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
-              value: "update"
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
