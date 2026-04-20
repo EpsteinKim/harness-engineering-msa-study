@@ -45,7 +45,7 @@ class KafkaConfig {
         @Value("\${spring.kafka.bootstrap-servers}") bootstrapServers: String,
     ): ConsumerFactory<String, Any> {
         val deserializer = JacksonJsonDeserializer<Any>().apply {
-            addTrustedPackages("com.epstein.practice.reserveservice.event", "com.epstein.practice.common.event")
+            addTrustedPackages("com.epstein.practice.reserveservice.type.event", "com.epstein.practice.common.event")
         }
         val props = mapOf<String, Any>(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,

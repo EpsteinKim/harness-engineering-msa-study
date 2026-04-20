@@ -6,7 +6,7 @@ import com.epstein.practice.common.event.PaymentFailed
 import com.epstein.practice.common.event.PaymentRequested
 import com.epstein.practice.common.event.PaymentSucceeded
 import com.epstein.practice.paymentservice.config.KafkaConfig
-import com.epstein.practice.paymentservice.service.PaymentProcessingService
+import com.epstein.practice.paymentservice.producer.PaymentProcessingService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener

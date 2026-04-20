@@ -1,4 +1,4 @@
-package com.epstein.practice.reserveservice.cache
+package com.epstein.practice.reserveservice.main.cache
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach

@@ -1,9 +1,9 @@
-package com.epstein.practice.reserveservice.controller
+package com.epstein.practice.reserveservice.main.controller
 
 import com.epstein.practice.common.exception.GlobalExceptionHandler
 import com.epstein.practice.common.exception.ServerException
-import com.epstein.practice.reserveservice.dto.MyReservationItem
-import com.epstein.practice.reserveservice.service.ReservationService
+import com.epstein.practice.reserveservice.type.dto.MyReservationItem
+import com.epstein.practice.reserveservice.main.service.ReservationService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -28,7 +28,7 @@ class ReservationControllerTest {
     lateinit var queueService: ReservationService
 
     @Mock
-    lateinit var paymentInitiator: com.epstein.practice.reserveservice.service.PaymentInitiator
+    lateinit var paymentInitiator: com.epstein.practice.reserveservice.producer.PaymentInitiator
 
     lateinit var mockMvc: MockMvc
 

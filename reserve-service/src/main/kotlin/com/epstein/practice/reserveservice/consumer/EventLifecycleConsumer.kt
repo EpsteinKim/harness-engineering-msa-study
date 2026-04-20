@@ -3,7 +3,7 @@ package com.epstein.practice.reserveservice.consumer
 import com.epstein.practice.common.event.EventClosedRequest
 import com.epstein.practice.common.event.EventOpenedRequest
 import com.epstein.practice.reserveservice.config.KafkaConfig
-import com.epstein.practice.reserveservice.service.SeatSyncService
+import com.epstein.practice.reserveservice.main.service.SeatSyncService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener

@@ -1,9 +1,9 @@
-package com.epstein.practice.reserveservice.service
+package com.epstein.practice.reserveservice.main.service
 
-import com.epstein.practice.reserveservice.cache.EventCacheRepository
-import com.epstein.practice.reserveservice.entity.Seat
-import com.epstein.practice.reserveservice.entity.SeatStatus
-import com.epstein.practice.reserveservice.repository.SeatRepository
+import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.type.entity.Seat
+import com.epstein.practice.reserveservice.type.entity.SeatStatus
+import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName

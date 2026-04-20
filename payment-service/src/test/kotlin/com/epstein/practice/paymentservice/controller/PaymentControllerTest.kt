@@ -1,11 +1,11 @@
-package com.epstein.practice.paymentservice.controller
+package com.epstein.practice.paymentservice.main.controller
 
 import com.epstein.practice.common.exception.GlobalExceptionHandler
 import com.epstein.practice.common.exception.ServerException
-import com.epstein.practice.paymentservice.constant.ErrorCode
-import com.epstein.practice.paymentservice.entity.Payment
-import com.epstein.practice.paymentservice.entity.PaymentStatus
-import com.epstein.practice.paymentservice.service.PaymentService
+import com.epstein.practice.paymentservice.type.constant.ErrorCode
+import com.epstein.practice.paymentservice.type.entity.Payment
+import com.epstein.practice.paymentservice.type.entity.PaymentStatus
+import com.epstein.practice.paymentservice.main.service.PaymentService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test

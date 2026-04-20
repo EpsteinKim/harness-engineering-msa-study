@@ -1,0 +1,46 @@
+package com.epstein.practice.reserveservice.main.repository.support
+
+import com.epstein.practice.reserveservice.type.dto.SectionAvailabilityResponse
+import com.epstein.practice.reserveservice.type.entity.QSeat
+import com.epstein.practice.reserveservice.type.entity.SeatStatus
+import com.querydsl.core.types.Projections
+import com.querydsl.core.types.dsl.Expressions
+import com.querydsl.jpa.JPAExpressions
+import com.querydsl.jpa.impl.JPAQueryFactory
+import org.springframework.stereotype.Repository
+
+@Repository
+class SeatQueryRepository(
+    private val queryFactory: JPAQueryFactory
+) {
+
+    fun countAvailableBySection(eventId: Long): List<SectionAvailabilityResponse> {
+        val seat = QSeat.seat
+        val sub = QSeat("sub")
+
+        return queryFactory
+            .select(
+                Projections.constructor(
+                    SectionAvailabilityResponse::class.java,
+                    seat.section,
+                    seat.count(),
+                    JPAExpressions
+                        .select(sub.count())
+                        .from(sub)
+                        .where(
+                            sub.eventId.eq(eventId),
+                            sub.section.eq(seat.section)
+                        ),
+                    Expressions.constant(0L)
+                )
+            )
+            .from(seat)
+            .where(
+                seat.eventId.eq(eventId),
+                seat.status.eq(SeatStatus.AVAILABLE)
+            )
+            .groupBy(seat.section)
+            .orderBy(seat.section.asc())
+            .fetch()
+    }
+}

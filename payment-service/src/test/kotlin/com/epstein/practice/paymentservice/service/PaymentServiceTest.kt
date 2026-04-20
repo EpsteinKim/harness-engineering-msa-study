@@ -1,9 +1,9 @@
-package com.epstein.practice.paymentservice.service
+package com.epstein.practice.paymentservice.main.service
 
 import com.epstein.practice.common.exception.ServerException
-import com.epstein.practice.paymentservice.entity.Payment
-import com.epstein.practice.paymentservice.entity.PaymentStatus
-import com.epstein.practice.paymentservice.repository.PaymentRepository
+import com.epstein.practice.paymentservice.type.entity.Payment
+import com.epstein.practice.paymentservice.type.entity.PaymentStatus
+import com.epstein.practice.paymentservice.main.repository.PaymentRepository
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
