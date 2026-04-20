@@ -25,11 +25,16 @@ echo "=== 인프라 Ready 대기 ==="
 kubectl wait --for=condition=ready pod -l app=redis --timeout=120s
 kubectl wait --for=condition=ready pod -l app=kafka --timeout=180s
 
-echo "=== 앱 서비스 배포 ==="
-kubectl apply -f "$K8S_DIR/apps/"
+echo "=== core-service 배포 (워밍업 선행) ==="
+kubectl apply -f "$K8S_DIR/apps/core-deployment.yaml"
+kubectl wait --for=condition=ready pod -l app=core-service --timeout=120s
+
+echo "=== 나머지 서비스 배포 ==="
+kubectl apply -f "$K8S_DIR/apps/reserve-deployment.yaml"
+kubectl apply -f "$K8S_DIR/apps/payment-deployment.yaml"
+kubectl apply -f "$K8S_DIR/apps/gateway-deployment.yaml"
 
 echo "=== 앱 서비스 Ready 대기 ==="
-kubectl wait --for=condition=ready pod -l app=core-service --timeout=120s
 kubectl wait --for=condition=ready pod -l app=reserve-service --timeout=120s
 kubectl wait --for=condition=ready pod -l app=payment-service --timeout=120s
 kubectl wait --for=condition=ready pod -l app=gateway --timeout=120s
