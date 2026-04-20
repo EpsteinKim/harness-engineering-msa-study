@@ -23,6 +23,9 @@ services:
         SERVICE_NAME: reserve-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${RESERVE_DB_URL}
+      - SPRING_DATASOURCE_USERNAME=${RESERVE_DB_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${RESERVE_DB_PASSWORD}
     depends_on:
       redis:
         condition: service_healthy
@@ -38,6 +41,9 @@ services:
         SERVICE_NAME: core-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${CORE_DB_URL}
+      - SPRING_DATASOURCE_USERNAME=${CORE_DB_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${CORE_DB_PASSWORD}
     depends_on:
       redis:
         condition: service_healthy
@@ -53,6 +59,9 @@ services:
         SERVICE_NAME: payment-service
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=${PAYMENT_DB_URL}
+      - SPRING_DATASOURCE_USERNAME=${PAYMENT_DB_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${PAYMENT_DB_PASSWORD}
     depends_on:
       kafka:
         condition: service_healthy
