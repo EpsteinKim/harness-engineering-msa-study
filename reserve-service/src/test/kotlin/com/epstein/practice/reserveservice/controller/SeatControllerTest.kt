@@ -1,8 +1,8 @@
-package com.epstein.practice.reserveservice.controller
+package com.epstein.practice.reserveservice.main.controller
 
-import com.epstein.practice.reserveservice.dto.SeatMapEntry
-import com.epstein.practice.reserveservice.dto.SectionAvailabilityResponse
-import com.epstein.practice.reserveservice.service.SeatService
+import com.epstein.practice.reserveservice.type.dto.SeatMapEntry
+import com.epstein.practice.reserveservice.type.dto.SectionAvailabilityResponse
+import com.epstein.practice.reserveservice.main.service.SeatService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested

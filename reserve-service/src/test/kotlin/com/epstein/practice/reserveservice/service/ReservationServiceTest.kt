@@ -1,16 +1,16 @@
-package com.epstein.practice.reserveservice.service
+package com.epstein.practice.reserveservice.main.service
 
 import com.epstein.practice.common.exception.ServerException
-import com.epstein.practice.reserveservice.cache.EventCacheRepository
-import com.epstein.practice.reserveservice.cache.QueueCacheRepository
-import com.epstein.practice.reserveservice.client.PaymentClient
-import com.epstein.practice.reserveservice.client.PaymentSummary
-import com.epstein.practice.reserveservice.client.UserClient
-import com.epstein.practice.reserveservice.entity.Seat
-import com.epstein.practice.reserveservice.entity.SeatStatus
+import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.main.cache.QueueCacheRepository
+import com.epstein.practice.reserveservice.main.client.PaymentClient
+import com.epstein.practice.reserveservice.main.client.PaymentSummary
+import com.epstein.practice.reserveservice.main.client.UserClient
+import com.epstein.practice.reserveservice.type.entity.Seat
+import com.epstein.practice.reserveservice.type.entity.SeatStatus
 import com.epstein.practice.reserveservice.config.KafkaConfig
-import com.epstein.practice.reserveservice.event.EnqueueMessage
-import com.epstein.practice.reserveservice.repository.SeatRepository
+import com.epstein.practice.reserveservice.type.event.EnqueueMessage
+import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName

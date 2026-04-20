@@ -7,10 +7,10 @@ import com.epstein.practice.common.event.PaymentRequested
 import com.epstein.practice.common.event.PaymentSucceeded
 import com.epstein.practice.common.event.SeatReleaseReason
 import com.epstein.practice.common.event.SeatReleased
-import com.epstein.practice.reserveservice.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.config.KafkaConfig
-import com.epstein.practice.reserveservice.entity.SeatStatus
-import com.epstein.practice.reserveservice.repository.SeatRepository
+import com.epstein.practice.reserveservice.type.entity.SeatStatus
+import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener

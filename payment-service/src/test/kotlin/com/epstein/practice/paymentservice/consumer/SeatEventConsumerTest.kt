@@ -4,8 +4,8 @@ import com.epstein.practice.common.event.HoldExpired
 import com.epstein.practice.common.event.SeatHeld
 import com.epstein.practice.common.event.SeatReleaseReason
 import com.epstein.practice.common.event.SeatReleased
-import com.epstein.practice.paymentservice.service.PaymentService
-import com.epstein.practice.paymentservice.service.PaymentTerminationService
+import com.epstein.practice.paymentservice.main.service.PaymentService
+import com.epstein.practice.paymentservice.producer.PaymentTerminationService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test

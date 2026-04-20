@@ -6,9 +6,9 @@ import com.epstein.practice.common.event.HoldExpiryTick
 import com.epstein.practice.common.event.LifecyclePhase
 import com.epstein.practice.reserveservice.config.KafkaConfig
 import com.epstein.practice.reserveservice.config.ReserveConfig
-import com.epstein.practice.reserveservice.entity.SeatStatus
-import com.epstein.practice.reserveservice.repository.SeatRepository
-import com.epstein.practice.reserveservice.service.SeatSyncService
+import com.epstein.practice.reserveservice.type.entity.SeatStatus
+import com.epstein.practice.reserveservice.main.repository.SeatRepository
+import com.epstein.practice.reserveservice.main.service.SeatSyncService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener

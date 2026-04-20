@@ -1,13 +1,13 @@
 package com.epstein.practice.reserveservice.consumer
 
 import com.epstein.practice.common.event.SeatHeld
-import com.epstein.practice.reserveservice.cache.EventCacheRepository
-import com.epstein.practice.reserveservice.cache.QueueCacheRepository
-import com.epstein.practice.reserveservice.event.EnqueueMessage
+import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.main.cache.QueueCacheRepository
+import com.epstein.practice.reserveservice.type.event.EnqueueMessage
 import com.epstein.practice.reserveservice.config.KafkaConfig
 import com.epstein.practice.reserveservice.config.ReserveConfig
-import com.epstein.practice.reserveservice.service.ReservationService
-import com.epstein.practice.reserveservice.service.SeatService
+import com.epstein.practice.reserveservice.main.service.ReservationService
+import com.epstein.practice.reserveservice.main.service.SeatService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.core.KafkaTemplate

@@ -6,8 +6,8 @@ import com.epstein.practice.common.event.SeatReleaseReason
 import com.epstein.practice.common.event.SeatReleased
 import com.epstein.practice.common.event.SeatReserved
 import com.epstein.practice.paymentservice.config.KafkaConfig
-import com.epstein.practice.paymentservice.service.PaymentService
-import com.epstein.practice.paymentservice.service.PaymentTerminationService
+import com.epstein.practice.paymentservice.main.service.PaymentService
+import com.epstein.practice.paymentservice.producer.PaymentTerminationService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener
