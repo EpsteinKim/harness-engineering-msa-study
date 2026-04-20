@@ -44,6 +44,7 @@ out/
 ### Environment ###
 .env
 !.env.sample
+**/database.properties
 
 ### Kubernetes Secrets ###
 kubernetes/config/db-secret.yaml
