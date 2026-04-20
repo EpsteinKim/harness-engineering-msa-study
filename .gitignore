@@ -46,3 +46,6 @@ out/
 **/database.properties
 # .sample은 커밋 대상
 !**/database.properties.sample
+
+### Kubernetes Secrets ###
+kubernetes/config/db-secret.yaml

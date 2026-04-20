@@ -80,10 +80,11 @@ class EventCacheRepository(
 
     fun getAllSeatPrices(eventId: Long): Map<Long, Long> {
         val all = hashOps.entries(eventCacheKey(eventId))
+        val prefix = seatPriceField(0L).substringBefore(":") + ":"
         return all.entries.asSequence()
-            .filter { it.key.startsWith(SEAT_PRICE_FIELD_PREFIX) }
+            .filter { it.key.startsWith(prefix) }
             .mapNotNull { entry ->
-                val seatId = entry.key.removePrefix(SEAT_PRICE_FIELD_PREFIX).toLongOrNull() ?: return@mapNotNull null
+                val seatId = entry.key.removePrefix(prefix).toLongOrNull() ?: return@mapNotNull null
                 val price = entry.value.toLongOrNull() ?: return@mapNotNull null
                 seatId to price
             }

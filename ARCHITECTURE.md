@@ -29,9 +29,25 @@
 [NeonDB] ← 서비스별 독립 DB (Database per Service)
 ```
 
-### 목표 (Phase 3 - K8s)
+### Phase 3 - Kubernetes (minikube)
 
-> Phase 2 구조를 Kubernetes 클러스터로 전환. reserve-service는 HPA, core-service는 replicas=1.
+> Phase 2 구조를 Kubernetes 클러스터로 전환. `docker` 프로파일 재사용 (DNS 이름 동일).
+
+```
+kubernetes/
+├── config/          # ConfigMap (SPRING_PROFILES_ACTIVE=docker) + Secret (NeonDB 크레덴셜)
+├── infrastructure/  # Redis Deployment + Kafka StatefulSet (KRaft)
+├── apps/            # 4개 서비스 Deployment + Service + HPA
+├── ingress/         # harness.local → gateway
+└── scripts/         # deploy.sh / teardown.sh
+```
+
+| 서비스 | replicas | 스케일링 | strategy | probe |
+|--------|----------|---------|----------|-------|
+| gateway | 1 | - | RollingUpdate | /actuator/health |
+| reserve-service | 2~5 | HPA (CPU 70%) | RollingUpdate | /actuator/health |
+| core-service | 1 (고정) | 없음 | Recreate | /actuator/health |
+| payment-service | 1~3 | HPA (CPU 70%) | RollingUpdate | /actuator/health |
 
 ---
 
@@ -215,6 +231,12 @@ harness-back/
 ├── reserve-service/   # 좌석 예약 + 대기열 (핫패스)
 ├── core-service/      # 이벤트 라이프사이클 + 유저 관리 (콜드패스)
 ├── payment-service/   # 결제 처리
+├── kubernetes/        # K8s 매니페스트
+│   ├── config/        # ConfigMap, Secret
+│   ├── infrastructure/# Redis, Kafka
+│   ├── apps/          # 서비스 Deployment + HPA
+│   ├── ingress/       # Ingress
+│   └── scripts/       # deploy.sh, teardown.sh
 └── docs/              # 문서 (설계, 명세, 학습)
 ```
 
@@ -226,3 +248,4 @@ harness-back/
 |------|------|-----------|
 | 2026-04-06 | v1.0.0 | 최초 작성 |
 | 2026-04-17 | v12.0.0 | Event-Driven 전환 (Kafka + Saga), core-service 분리 (user-service 흡수 + Event 도메인 이관), 구조 전면 재작성 |
+| 2026-04-20 | v13.0.0 | Phase 3 Kubernetes 전환: 매니페스트 전체 작성, Actuator 추가, docker 프로파일 재사용 |
