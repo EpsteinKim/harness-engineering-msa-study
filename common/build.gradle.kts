@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm")
+    kotlin("plugin.spring")
 }
 
 java {
@@ -17,10 +18,14 @@ dependencies {
     compileOnly("jakarta.persistence:jakarta.persistence-api")
     compileOnly("org.springframework.data:spring-data-jpa")
     compileOnly("org.springframework.kafka:spring-kafka")
+    implementation(kotlin("stdlib"))
 }
 
 kotlin {
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
     }
+}
+repositories {
+    mavenCentral()
 }
