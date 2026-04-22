@@ -24,7 +24,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
@@ -49,7 +49,7 @@ class ReservationServiceTest {
     lateinit var paymentClient: PaymentClient
 
     @Mock
-    lateinit var kafkaTemplate: KafkaTemplate<String, Any>
+    lateinit var outboxService: OutboxService
 
     private lateinit var service: ReservationService
 
@@ -57,7 +57,7 @@ class ReservationServiceTest {
     fun setUp() {
         service = ReservationService(
             eventCache, queueCache, seatService, seatRepository,
-            userClient, paymentClient, kafkaTemplate
+            userClient, paymentClient, outboxService
         )
         lenient().`when`(userClient.exists(anyLong())).thenReturn(true)
     }
@@ -79,7 +79,7 @@ class ReservationServiceTest {
             service.enqueue("1", 1L, seatId = 10L)
 
             verify(queueCache).addToQueue(anyLong(), anyString(), anyDouble())
-            verify(kafkaTemplate).send(eq(KafkaConfig.TOPIC_QUEUE) ?: "", anyString(), any<EnqueueMessage>() ?: EnqueueMessage(0, "", joinedAt = 0))
+            verify(outboxService).save(eq(KafkaConfig.TOPIC_QUEUE) ?: "", anyString(), any<EnqueueMessage>() ?: EnqueueMessage(0, "", joinedAt = 0))
         }
 
         @Test

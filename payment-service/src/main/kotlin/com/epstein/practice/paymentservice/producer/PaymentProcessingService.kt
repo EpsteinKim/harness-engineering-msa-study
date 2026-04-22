@@ -9,7 +9,7 @@ import com.epstein.practice.paymentservice.type.entity.PaymentStatus
 import com.epstein.practice.paymentservice.main.repository.PaymentRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -22,7 +22,7 @@ import kotlin.random.Random
 @Service
 class PaymentProcessingService(
     private val paymentRepository: PaymentRepository,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val outboxService: OutboxService,
     @Value("\${payment.success-rate:0.7}") private val successRate: Double,
     private val random: Random = Random.Default,
 ) {
@@ -40,7 +40,7 @@ class PaymentProcessingService(
             payment.status = PaymentStatus.FAILED
             payment.completedAt = LocalDateTime.now()
             logger.info("Invalid method, payment FAILED: seat={}, method={}", request.seatId, request.method)
-            kafkaTemplate.send(
+            outboxService.save(
                 KafkaConfig.TOPIC_PAYMENT_EVENTS, request.seatId.toString(),
                 PaymentFailed(
                     seatId = request.seatId,
@@ -74,6 +74,6 @@ class PaymentProcessingService(
                 reason = "RANDOM_FAILURE"
             )
         }
-        kafkaTemplate.send(KafkaConfig.TOPIC_PAYMENT_EVENTS, request.seatId.toString(), resultEvent)
+        outboxService.save(KafkaConfig.TOPIC_PAYMENT_EVENTS, request.seatId.toString(), resultEvent)
     }
 }

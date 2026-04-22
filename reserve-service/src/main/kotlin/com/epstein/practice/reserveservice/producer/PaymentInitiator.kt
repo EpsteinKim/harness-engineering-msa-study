@@ -7,7 +7,7 @@ import com.epstein.practice.reserveservice.type.constant.ErrorCode
 import com.epstein.practice.reserveservice.type.entity.SeatStatus
 import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import org.slf4j.LoggerFactory
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class PaymentInitiator(
     private val seatRepository: SeatRepository,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val outboxService: OutboxService,
 ) {
     private val logger = LoggerFactory.getLogger(PaymentInitiator::class.java)
 
@@ -31,7 +31,7 @@ class PaymentInitiator(
             )
 
         val request = PaymentRequested(seatId = seat.id, userId = userId, method = method)
-        kafkaTemplate.send(KafkaConfig.TOPIC_PAYMENT_EVENTS, seat.id.toString(), request)
+        outboxService.save(KafkaConfig.TOPIC_PAYMENT_EVENTS, seat.id.toString(), request)
         logger.info("PaymentRequested published: seat={}, user={}, method={}", seat.id, userId, method)
         return seat.id
     }

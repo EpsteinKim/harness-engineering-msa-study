@@ -21,7 +21,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 
 @ExtendWith(MockitoExtension::class)
@@ -31,13 +31,13 @@ class QueueConsumerTest {
     @Mock lateinit var seatService: SeatService
     @Mock lateinit var eventCache: EventCacheRepository
     @Mock lateinit var queueCache: QueueCacheRepository
-    @Mock lateinit var kafkaTemplate: KafkaTemplate<String, Any>
+    @Mock lateinit var outboxService: OutboxService
 
     private lateinit var consumer: QueueConsumer
 
     @BeforeEach
     fun setUp() {
-        consumer = QueueConsumer(reserveService, seatService, eventCache, queueCache, kafkaTemplate)
+        consumer = QueueConsumer(reserveService, seatService, eventCache, queueCache, outboxService)
     }
 
     private fun msg(section: String? = "A", seatId: Long? = null) =
@@ -81,7 +81,7 @@ class QueueConsumerTest {
         verify(eventCache).adjustSeatCounts(1L, -1, "A")
         verify(eventCache, never()).markSeatReserved(anyLong(), anyLong())
         verify(reserveService).removeFromWaiting(1L, "1")
-        verify(kafkaTemplate).send(eq(KafkaConfig.TOPIC_SEAT_EVENTS) ?: "", eq("100") ?: "", any<SeatHeld>() ?: SeatHeld(0, 0, 0, "", 0, 0))
+        verify(outboxService).save(eq(KafkaConfig.TOPIC_SEAT_EVENTS) ?: "", eq("100") ?: "", any<SeatHeld>() ?: SeatHeld(0, 0, 0, "", 0, 0))
     }
 
     @Test
@@ -98,7 +98,7 @@ class QueueConsumerTest {
 
         verify(eventCache).adjustSeatCounts(1L, -1, "A")
         verify(eventCache).markSeatReserved(1L, 99L)
-        verify(kafkaTemplate).send(eq(KafkaConfig.TOPIC_SEAT_EVENTS) ?: "", eq("99") ?: "", any<SeatHeld>() ?: SeatHeld(0, 0, 0, "", 0, 0))
+        verify(outboxService).save(eq(KafkaConfig.TOPIC_SEAT_EVENTS) ?: "", eq("99") ?: "", any<SeatHeld>() ?: SeatHeld(0, 0, 0, "", 0, 0))
     }
 
     @Test

@@ -12,7 +12,7 @@ import com.epstein.practice.reserveservice.main.service.SeatSyncService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Component
 import java.time.LocalDateTime
 
@@ -21,7 +21,7 @@ import java.time.LocalDateTime
 class TickConsumer(
     private val seatSyncService: SeatSyncService,
     private val seatRepository: SeatRepository,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val outboxService: OutboxService,
 ) {
     private val logger = LoggerFactory.getLogger(TickConsumer::class.java)
 
@@ -45,7 +45,7 @@ class TickConsumer(
         logger.info("Publishing HoldExpired for {} seats via tick", expired.size)
         for (seat in expired) {
             val userId = seat.userId ?: continue
-            kafkaTemplate.send(
+            outboxService.save(
                 KafkaConfig.TOPIC_SEAT_EVENTS,
                 seat.id.toString(),
                 HoldExpired(seatId = seat.id, userId = userId, eventId = seat.eventId)

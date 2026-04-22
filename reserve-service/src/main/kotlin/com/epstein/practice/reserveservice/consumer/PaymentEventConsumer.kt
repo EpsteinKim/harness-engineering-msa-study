@@ -14,7 +14,7 @@ import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -33,7 +33,7 @@ import java.time.LocalDateTime
 class PaymentEventConsumer(
     private val seatRepository: SeatRepository,
     private val eventCache: EventCacheRepository,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val outboxService: OutboxService,
 ) {
     private val logger = LoggerFactory.getLogger(PaymentEventConsumer::class.java)
 
@@ -74,7 +74,7 @@ class PaymentEventConsumer(
         eventCache.adjustSeatCounts(eventId, 1, section)
         eventCache.markSeatAvailable(eventId, seat.id)
 
-        kafkaTemplate.send(
+        outboxService.save(
             KafkaConfig.TOPIC_SEAT_EVENTS,
             seat.id.toString(),
             SeatReleased(

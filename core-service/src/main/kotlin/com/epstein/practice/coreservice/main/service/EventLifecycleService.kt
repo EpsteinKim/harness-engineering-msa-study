@@ -8,7 +8,7 @@ import com.epstein.practice.coreservice.type.entity.Event
 import com.epstein.practice.coreservice.type.entity.EventStatus
 import com.epstein.practice.coreservice.main.repository.EventRepository
 import org.slf4j.LoggerFactory
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
@@ -19,7 +19,7 @@ import java.time.ZoneOffset
 class EventLifecycleService(
     private val eventRepository: EventRepository,
     private val eventCache: EventCacheRepository,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val outboxService: OutboxService,
 ) {
     private val logger = LoggerFactory.getLogger(EventLifecycleService::class.java)
 
@@ -48,7 +48,7 @@ class EventLifecycleService(
             eventRepository.save(event)
             eventCache.removeOpenEventIndex(event.id)
             eventCache.deleteEvent(event.id)
-            kafkaTemplate.send(KafkaConfig.TOPIC_EVENT_LIFECYCLE, EventClosedRequest(eventId = event.id))
+            outboxService.save(KafkaConfig.TOPIC_EVENT_LIFECYCLE, null, EventClosedRequest(eventId = event.id))
             logger.info("Closed event: id={}, name={}", event.id, event.name)
         }
         return events.size
@@ -93,8 +93,9 @@ class EventLifecycleService(
     }
 
     private fun publishEventOpened(event: Event) {
-        kafkaTemplate.send(
+        outboxService.save(
             KafkaConfig.TOPIC_EVENT_LIFECYCLE,
+            null,
             EventOpenedRequest(
                 eventId = event.id,
                 name = event.name,

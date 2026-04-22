@@ -10,7 +10,7 @@ import com.epstein.practice.reserveservice.main.service.ReservationService
 import com.epstein.practice.reserveservice.main.service.SeatService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Component
 
@@ -29,7 +29,7 @@ class QueueConsumer(
     private val seatService: SeatService,
     private val eventCache: EventCacheRepository,
     private val queueCache: QueueCacheRepository,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val outboxService: OutboxService,
 ) {
     private val logger = LoggerFactory.getLogger(QueueConsumer::class.java)
 
@@ -105,6 +105,6 @@ class QueueConsumer(
             amount = amount,
             heldUntilMs = System.currentTimeMillis() + ReserveConfig.HOLD_TTL_MS
         )
-        kafkaTemplate.send(KafkaConfig.TOPIC_SEAT_EVENTS, seatId.toString(), event)
+        outboxService.save(KafkaConfig.TOPIC_SEAT_EVENTS, seatId.toString(), event)
     }
 }

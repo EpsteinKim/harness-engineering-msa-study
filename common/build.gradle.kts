@@ -13,6 +13,10 @@ dependencies {
     implementation("tools.jackson.module:jackson-module-kotlin:3.0.4")
     implementation("org.springframework:spring-web")
     implementation("org.slf4j:slf4j-api")
+    // Outbox 패턴: Entity + Repository 공유
+    compileOnly("jakarta.persistence:jakarta.persistence-api")
+    compileOnly("org.springframework.data:spring-data-jpa")
+    compileOnly("org.springframework.kafka:spring-kafka")
 }
 
 kotlin {
