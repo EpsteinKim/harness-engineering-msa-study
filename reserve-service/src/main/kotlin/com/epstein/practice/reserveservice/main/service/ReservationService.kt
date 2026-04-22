@@ -14,7 +14,7 @@ import com.epstein.practice.reserveservice.type.constant.ErrorCode
 import com.epstein.practice.reserveservice.type.dto.MyReservationItem
 import com.epstein.practice.reserveservice.type.event.EnqueueMessage
 import com.epstein.practice.reserveservice.main.repository.SeatRepository
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Service
 import kotlin.math.absoluteValue
 
@@ -26,7 +26,7 @@ class ReservationService(
     private val seatRepository: SeatRepository,
     private val userClient: UserClient,
     private val paymentClient: PaymentClient,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val outboxService: OutboxService,
 ) {
     fun enqueue(userId: String, eventId: Long, seatId: Long? = null, section: String? = null) {
         val userIdLong = userId.toLongOrNull()
@@ -89,7 +89,7 @@ class ReservationService(
             section = section,
             joinedAt = now
         )
-        kafkaTemplate.send(KafkaConfig.TOPIC_QUEUE, key, message)
+        outboxService.save(KafkaConfig.TOPIC_QUEUE, key, message)
     }
 
     fun removeFromWaiting(eventId: Long, userId: String) {
@@ -110,7 +110,7 @@ class ReservationService(
         val releaseResult = seatService.releaseSeat(eventId, userId.toLong())
         if (releaseResult.success) {
             eventCache.adjustSeatCounts(eventId, 1, releaseResult.section)
-            kafkaTemplate.send(
+            outboxService.save(
                 KafkaConfig.TOPIC_SEAT_EVENTS,
                 releaseResult.seatId.toString(),
                 SeatReleased(

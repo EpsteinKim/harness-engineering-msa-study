@@ -6,7 +6,7 @@ import com.epstein.practice.paymentservice.config.KafkaConfig
 import com.epstein.practice.paymentservice.type.entity.PaymentStatus
 import com.epstein.practice.paymentservice.main.repository.PaymentRepository
 import org.slf4j.LoggerFactory
-import org.springframework.kafka.core.KafkaTemplate
+import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -18,7 +18,7 @@ import java.time.LocalDateTime
 @Service
 class PaymentTerminationService(
     private val paymentRepository: PaymentRepository,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val outboxService: OutboxService,
 ) {
     private val logger = LoggerFactory.getLogger(PaymentTerminationService::class.java)
 
@@ -28,7 +28,7 @@ class PaymentTerminationService(
         payment.status = PaymentStatus.EXPIRED
         payment.completedAt = LocalDateTime.now()
         logger.info("Payment EXPIRED: id={}, seatId={}", payment.id, seatId)
-        kafkaTemplate.send(
+        outboxService.save(
             KafkaConfig.TOPIC_PAYMENT_EVENTS, seatId.toString(),
             PaymentExpired(seatId = seatId, paymentId = payment.id)
         )
@@ -40,7 +40,7 @@ class PaymentTerminationService(
         payment.status = PaymentStatus.CANCELLED
         payment.completedAt = LocalDateTime.now()
         logger.info("Payment CANCELLED: id={}, seatId={}", payment.id, seatId)
-        kafkaTemplate.send(
+        outboxService.save(
             KafkaConfig.TOPIC_PAYMENT_EVENTS, seatId.toString(),
             PaymentCancelled(seatId = seatId, paymentId = payment.id)
         )
