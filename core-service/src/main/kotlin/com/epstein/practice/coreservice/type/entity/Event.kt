@@ -1,7 +1,8 @@
 package com.epstein.practice.coreservice.type.entity
 
 import jakarta.persistence.*
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 @Entity
 @Table(
@@ -19,24 +20,24 @@ class Event(
     val name: String,
 
     @Column(name = "event_time", nullable = false)
-    val eventTime: LocalDateTime,
+    val eventTime: ZonedDateTime,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     var status: EventStatus = EventStatus.CLOSED,
 
     @Column(name = "ticket_open_time")
-    val ticketOpenTime: LocalDateTime? = null,
+    val ticketOpenTime: ZonedDateTime? = null,
 
     @Column(name = "ticket_close_time")
-    val ticketCloseTime: LocalDateTime? = null,
+    val ticketCloseTime: ZonedDateTime? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(name = "seat_selection_type", nullable = false, length = 20)
     val seatSelectionType: SeatSelectionType = SeatSelectionType.SECTION_SELECT,
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    val createdAt: LocalDateTime = LocalDateTime.now()
+    val createdAt: ZonedDateTime = ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
 )
 
 enum class EventStatus {

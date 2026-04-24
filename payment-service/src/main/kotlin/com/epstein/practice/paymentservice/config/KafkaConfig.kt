@@ -9,6 +9,9 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
+import org.springframework.kafka.listener.DefaultErrorHandler
+import org.springframework.util.backoff.FixedBackOff
 import org.springframework.kafka.core.ConsumerFactory
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory
 import org.springframework.kafka.core.DefaultKafkaProducerFactory
@@ -56,15 +59,23 @@ class KafkaConfig {
     @Bean
     fun kafkaListenerContainerFactory(
         consumerFactory: ConsumerFactory<String, Any>,
+        kafkaTemplate: KafkaTemplate<String, Any>,
     ): ConcurrentKafkaListenerContainerFactory<String, Any> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, Any>()
         factory.setConsumerFactory(consumerFactory)
+        factory.setCommonErrorHandler(
+            DefaultErrorHandler(
+                DeadLetterPublishingRecoverer(kafkaTemplate),
+                FixedBackOff(1000L, 3)
+            )
+        )
         return factory
     }
 
     companion object {
         const val TOPIC_SEAT_EVENTS = "seat.events"
         const val TOPIC_PAYMENT_EVENTS = "payment.events"
+        const val TOPIC_PAYMENT_COMMANDS = "payment.commands"
         const val CONSUMER_GROUP_ID = "payment-service"
     }
 }

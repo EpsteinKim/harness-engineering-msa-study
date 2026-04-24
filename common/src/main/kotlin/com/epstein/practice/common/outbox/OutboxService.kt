@@ -14,6 +14,7 @@ class OutboxService(
                 topic = topic,
                 key = key,
                 payload = objectMapper.writeValueAsString(payload),
+                eventType = payload::class.java.name,
             )
         )
     }

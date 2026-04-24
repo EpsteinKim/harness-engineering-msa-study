@@ -1,7 +1,8 @@
 package com.epstein.practice.reserveservice.type.entity
 
 import jakarta.persistence.*
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 @Entity
 @Table(name = "seat")
@@ -27,7 +28,7 @@ class Seat(
     var userId: Long? = null,
 
     @Column(name = "reserved_at")
-    var reservedAt: LocalDateTime? = null,
+    var reservedAt: ZonedDateTime? = null,
 
     @Column(name = "price_amount", nullable = false)
     val priceAmount: Long = 0,

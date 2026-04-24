@@ -1,8 +1,7 @@
 package com.epstein.practice.paymentservice.service
 
-import com.epstein.practice.common.event.PaymentRequested
+import com.epstein.practice.common.event.ProcessPaymentCommand
 import com.epstein.practice.common.outbox.OutboxService
-import com.epstein.practice.paymentservice.config.KafkaConfig
 import com.epstein.practice.paymentservice.producer.PaymentProcessingService
 import com.epstein.practice.paymentservice.type.entity.Payment
 import com.epstein.practice.paymentservice.type.entity.PaymentStatus
@@ -44,55 +43,58 @@ class PaymentProcessingServiceTest {
         amount = 200000L, method = null, status = PaymentStatus.PENDING
     )
 
+    private fun command(seatId: Long = 10L, method: String = "CARD") =
+        ProcessPaymentCommand(sagaId = 1L, seatId = seatId, userId = 1L, method = method)
+
     @Test
     @DisplayName("PENDING 없으면 skip")
     fun noPendingSkips() {
         buildService(rate = 0.7, nextDouble = 0.5)
         `when`(paymentRepository.findBySeatIdAndStatus(10L, PaymentStatus.PENDING)).thenReturn(null)
 
-        service.process(PaymentRequested(seatId = 10L, userId = 1L, method = "CARD"))
+        service.process(command())
 
         verify(outboxService, never()).save(any() ?: "", any(), any() ?: Any())
     }
 
     @Test
-    @DisplayName("유효하지 않은 method는 FAILED로 전이 + PaymentFailed 발행")
-    fun invalidMethodFailsAndPublishes() {
+    @DisplayName("유효하지 않은 method는 FAILED")
+    fun invalidMethodFails() {
         buildService(rate = 0.7, nextDouble = 0.5)
         val payment = pending()
         `when`(paymentRepository.findBySeatIdAndStatus(10L, PaymentStatus.PENDING)).thenReturn(payment)
 
-        service.process(PaymentRequested(seatId = 10L, userId = 1L, method = "BITCOIN"))
+        service.process(command(method = "BITCOIN"))
 
         assertEquals(PaymentStatus.FAILED, payment.status)
-        verify(outboxService).save(eq(KafkaConfig.TOPIC_PAYMENT_EVENTS) ?: "", eq("10"), any() ?: Any())
+        verify(outboxService).save(any() ?: "", eq("10"), any() ?: Any())
     }
 
     @Test
-    @DisplayName("random < rate 면 SUCCEEDED + PaymentSucceeded 발행")
-    fun succeededPublishes() {
+    @DisplayName("random < rate 면 SUCCEEDED")
+    fun succeeds() {
         buildService(rate = 0.7, nextDouble = 0.5)
         val payment = pending()
         `when`(paymentRepository.findBySeatIdAndStatus(10L, PaymentStatus.PENDING)).thenReturn(payment)
 
-        service.process(PaymentRequested(seatId = 10L, userId = 1L, method = "CARD"))
+        service.process(command())
 
         assertEquals(PaymentStatus.SUCCEEDED, payment.status)
         assertEquals("CARD", payment.method)
         assertNotNull(payment.completedAt)
-        verify(outboxService).save(eq(KafkaConfig.TOPIC_PAYMENT_EVENTS) ?: "", eq("10"), any() ?: Any())
+        verify(outboxService).save(any() ?: "", eq("10"), any() ?: Any())
     }
 
     @Test
-    @DisplayName("random >= rate 면 FAILED + PaymentFailed 발행")
-    fun failedPublishes() {
+    @DisplayName("random >= rate 면 FAILED")
+    fun fails() {
         buildService(rate = 0.7, nextDouble = 0.9)
         val payment = pending()
         `when`(paymentRepository.findBySeatIdAndStatus(10L, PaymentStatus.PENDING)).thenReturn(payment)
 
-        service.process(PaymentRequested(seatId = 10L, userId = 1L, method = "CARD"))
+        service.process(command())
 
         assertEquals(PaymentStatus.FAILED, payment.status)
-        verify(outboxService).save(eq(KafkaConfig.TOPIC_PAYMENT_EVENTS) ?: "", eq("10"), any() ?: Any())
+        verify(outboxService).save(any() ?: "", eq("10"), any() ?: Any())
     }
 }

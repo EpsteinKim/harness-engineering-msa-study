@@ -17,7 +17,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 
 @ExtendWith(MockitoExtension::class)
 class PaymentControllerTest {
@@ -54,7 +54,7 @@ class PaymentControllerTest {
             id = 1L, seatId = 10L, userId = 1L, eventId = 1L,
             amount = 10000L, method = "CARD",
             status = PaymentStatus.SUCCEEDED,
-            completedAt = LocalDateTime.now()
+            completedAt = ZonedDateTime.now()
         )
         `when`(paymentService.getByUserId(1L)).thenReturn(listOf(payment))
 

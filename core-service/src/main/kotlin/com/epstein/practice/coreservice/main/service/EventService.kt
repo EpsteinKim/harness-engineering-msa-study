@@ -8,7 +8,8 @@ import com.epstein.practice.coreservice.type.entity.Event
 import com.epstein.practice.coreservice.type.entity.EventStatus
 import com.epstein.practice.coreservice.main.repository.EventRepository
 import org.springframework.stereotype.Service
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 @Service
 class EventService(
@@ -40,12 +41,12 @@ class EventService(
         return EventSummaryResponse(
             id = fields["id"]?.toLongOrNull() ?: eventId,
             name = fields["name"] ?: return null,
-            eventTime = fields["eventTime"]?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() } ?: return null,
+            eventTime = fields["eventTime"]?.let { runCatching { ZonedDateTime.parse(it) }.getOrNull() } ?: return null,
             status = fields["status"] ?: "OPEN",
             ticketOpenTime = fields["ticketOpenTime"]?.takeIf { it.isNotEmpty() }
-                ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() },
+                ?.let { runCatching { ZonedDateTime.parse(it) }.getOrNull() },
             ticketCloseTime = fields["ticketCloseTime"]?.takeIf { it.isNotEmpty() }
-                ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() },
+                ?.let { runCatching { ZonedDateTime.parse(it) }.getOrNull() },
             seatSelectionType = fields["seatSelectionType"] ?: "SECTION_SELECT",
             remainingSeats = fields["remainingSeats"]?.toLongOrNull() ?: 0
         )

@@ -65,6 +65,7 @@ spec:
                 command: ["/bin/sh", "-c", "sleep 15"]
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1000
             allowPrivilegeEscalation: false
           resources:
             requests:

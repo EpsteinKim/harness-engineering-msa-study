@@ -1,27 +1,19 @@
 package com.epstein.practice.reserveservice.consumer
 
 import com.epstein.practice.common.event.EventLifecycleTick
-import com.epstein.practice.common.event.HoldExpired
 import com.epstein.practice.common.event.HoldExpiryTick
 import com.epstein.practice.common.event.LifecyclePhase
 import com.epstein.practice.reserveservice.config.KafkaConfig
-import com.epstein.practice.reserveservice.config.ReserveConfig
-import com.epstein.practice.reserveservice.type.entity.SeatStatus
-import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import com.epstein.practice.reserveservice.main.service.SeatSyncService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener
-import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Component
-import java.time.LocalDateTime
 
 @Component
 @KafkaListener(topics = [KafkaConfig.TOPIC_SYSTEM_TICKS])
 class TickConsumer(
     private val seatSyncService: SeatSyncService,
-    private val seatRepository: SeatRepository,
-    private val outboxService: OutboxService,
 ) {
     private val logger = LoggerFactory.getLogger(TickConsumer::class.java)
 
@@ -38,18 +30,6 @@ class TickConsumer(
 
     @KafkaHandler
     fun onHoldExpiryTick(tick: HoldExpiryTick) {
-        val threshold = LocalDateTime.now().minusNanos(ReserveConfig.HOLD_TTL_MS * 1_000_000)
-        val expired = seatRepository.findExpiredHolds(SeatStatus.PAYMENT_PENDING, threshold)
-        if (expired.isEmpty()) return
-
-        logger.info("Publishing HoldExpired for {} seats via tick", expired.size)
-        for (seat in expired) {
-            val userId = seat.userId ?: continue
-            outboxService.save(
-                KafkaConfig.TOPIC_SEAT_EVENTS,
-                seat.id.toString(),
-                HoldExpired(seatId = seat.id, userId = userId, eventId = seat.eventId)
-            )
-        }
+        // SagaTimeoutScheduler가 Saga 테이블 기반으로 타임아웃 처리
     }
 }

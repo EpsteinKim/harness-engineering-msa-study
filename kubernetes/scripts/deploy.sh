@@ -6,7 +6,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 K8S_DIR="$SCRIPT_DIR/.."
 
 echo "=== minikube Docker 환경 설정 ==="
-eval $(minikube docker-env)
+#eval $(minikube docker-env)
 
 echo "=== 이미지 빌드 ==="
 cd "$PROJECT_ROOT"

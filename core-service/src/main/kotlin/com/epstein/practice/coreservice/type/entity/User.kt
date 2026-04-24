@@ -7,7 +7,8 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.Version
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 @Entity
 @Table(name = "user_account")
@@ -26,7 +27,7 @@ class User(
     val password: String,
 
     @Column(name = "created_at", nullable = false)
-    val createdAt: LocalDateTime = LocalDateTime.now(),
+    val createdAt: ZonedDateTime = ZonedDateTime.now(ZoneId.of("Asia/Seoul")),
 
     /** Redis 캐시 무효화 기준. 업데이트 시 자동 증가 */
     @Version

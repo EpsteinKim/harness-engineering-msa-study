@@ -1,7 +1,14 @@
 package com.epstein.practice.common.outbox
 
+import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.header.internals.RecordHeader
+import org.apache.kafka.common.serialization.StringSerializer
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaTemplate
+import org.springframework.kafka.support.mapping.AbstractJavaTypeMapper
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -9,9 +16,21 @@ import org.springframework.transaction.annotation.Transactional
 @Component
 class OutboxPublisher(
     private val outboxRepository: OutboxRepository,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    @Value("\${spring.kafka.bootstrap-servers}") bootstrapServers: String,
 ) {
     private val logger = LoggerFactory.getLogger(OutboxPublisher::class.java)
+
+    // Outbox 전용: StringSerializer로 raw JSON 전송 (이중 인코딩 방지)
+    private val kafkaTemplate: KafkaTemplate<String, String> = KafkaTemplate(
+        DefaultKafkaProducerFactory(
+            mapOf<String, Any>(
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
+                ProducerConfig.ACKS_CONFIG to "1",
+            )
+        )
+    )
 
     @Scheduled(fixedDelay = 1000)
     @Transactional
@@ -20,7 +39,19 @@ class OutboxPublisher(
         if (pending.isEmpty()) return
 
         for (event in pending) {
-            kafkaTemplate.send(event.topic, event.key ?: "", event.payload)
+            val record = ProducerRecord(
+                event.topic,
+                null as Int?,
+                event.key ?: "",
+                event.payload,
+            )
+            record.headers().add(
+                RecordHeader(
+                    AbstractJavaTypeMapper.DEFAULT_CLASSID_FIELD_NAME,
+                    event.eventType.toByteArray()
+                )
+            )
+            kafkaTemplate.send(record)
         }
         outboxRepository.deleteAllInBatch(pending)
 

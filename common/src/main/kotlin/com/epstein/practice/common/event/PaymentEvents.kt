@@ -2,39 +2,44 @@ package com.epstein.practice.common.event
 
 /**
  * `payment.events` 토픽 메시지.
- * reserve-service ↔ payment-service 간 결제 Saga 이벤트.
+ * Saga Orchestrator ↔ payment-service 간 결제 응답 이벤트.
  */
 
-/** /pay 호출 시 reserve-service가 발행. payment-service가 소비해 실제 결제 시도 */
-data class PaymentRequested(
+/** 결제 생성 완료 시 payment-service가 발행. Orchestrator가 step 전이 */
+data class PaymentCreated(
+    val sagaId: Long,
     val seatId: Long,
     val userId: Long,
-    val method: String
+    val paymentId: Long,
 )
 
-/** 결제 성공 시 payment-service가 발행. reserve-service가 seat RESERVED로 전이 */
+/** 결제 성공 시 payment-service가 발행. Orchestrator가 seat RESERVED로 전이 */
 data class PaymentSucceeded(
+    val sagaId: Long,
     val seatId: Long,
     val userId: Long,
-    val paymentId: Long
+    val paymentId: Long,
 )
 
-/** 결제 실패 시 payment-service가 발행. reserve-service가 seat AVAILABLE로 복구 */
+/** 결제 실패 시 payment-service가 발행. Orchestrator가 보상 실행 */
 data class PaymentFailed(
+    val sagaId: Long,
     val seatId: Long,
     val userId: Long,
     val paymentId: Long?,
-    val reason: String
+    val reason: String,
 )
 
-/** HOLD 만료로 Payment가 EXPIRED 전이 시 payment-service가 발행 (관측용) */
+/** HOLD 만료로 Payment가 EXPIRED 전이 시 payment-service가 발행 */
 data class PaymentExpired(
+    val sagaId: Long,
     val seatId: Long,
-    val paymentId: Long
+    val paymentId: Long,
 )
 
-/** 사용자 취소로 Payment가 CANCELLED 전이 시 payment-service가 발행 (관측용) */
+/** 사용자 취소로 Payment가 CANCELLED 전이 시 payment-service가 발행 */
 data class PaymentCancelled(
+    val sagaId: Long,
     val seatId: Long,
-    val paymentId: Long
+    val paymentId: Long,
 )

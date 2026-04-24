@@ -1,6 +1,7 @@
 package com.epstein.practice.reserveservice.type.dto
 
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 data class EnqueueResponse(
     val userId: String,
@@ -30,7 +31,7 @@ data class SeatMapEntry(
 data class MyReservationItem(
     val eventId: Long,
     val eventName: String,
-    val eventTime: LocalDateTime,
+    val eventTime: ZonedDateTime,
     val seatId: Long,
     val seatNumber: String,
     val section: String,
@@ -38,5 +39,5 @@ data class MyReservationItem(
     val priceAmount: Long,
     val paymentId: Long?,
     val paymentStatus: String?,
-    val reservedAt: LocalDateTime?
+    val reservedAt: ZonedDateTime?
 )
