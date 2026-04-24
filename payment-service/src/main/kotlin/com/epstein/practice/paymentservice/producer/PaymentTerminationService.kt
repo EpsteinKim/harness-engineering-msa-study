@@ -9,12 +9,8 @@ import org.slf4j.LoggerFactory
 import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 
-/**
- * HOLD 만료 / 사용자 취소로 PENDING → EXPIRED / CANCELLED 전이.
- * 이미 PENDING이 아니면 no-op (멱등성).
- */
 @Service
 class PaymentTerminationService(
     private val paymentRepository: PaymentRepository,
@@ -23,26 +19,26 @@ class PaymentTerminationService(
     private val logger = LoggerFactory.getLogger(PaymentTerminationService::class.java)
 
     @Transactional
-    fun expirePending(seatId: Long) {
+    fun expirePending(seatId: Long, sagaId: Long) {
         val payment = paymentRepository.findBySeatIdAndStatus(seatId, PaymentStatus.PENDING) ?: return
         payment.status = PaymentStatus.EXPIRED
-        payment.completedAt = LocalDateTime.now()
+        payment.completedAt = ZonedDateTime.now()
         logger.info("Payment EXPIRED: id={}, seatId={}", payment.id, seatId)
         outboxService.save(
             KafkaConfig.TOPIC_PAYMENT_EVENTS, seatId.toString(),
-            PaymentExpired(seatId = seatId, paymentId = payment.id)
+            PaymentExpired(sagaId = sagaId, seatId = seatId, paymentId = payment.id)
         )
     }
 
     @Transactional
-    fun cancelPending(seatId: Long) {
+    fun cancelPending(seatId: Long, sagaId: Long) {
         val payment = paymentRepository.findBySeatIdAndStatus(seatId, PaymentStatus.PENDING) ?: return
         payment.status = PaymentStatus.CANCELLED
-        payment.completedAt = LocalDateTime.now()
+        payment.completedAt = ZonedDateTime.now()
         logger.info("Payment CANCELLED: id={}, seatId={}", payment.id, seatId)
         outboxService.save(
             KafkaConfig.TOPIC_PAYMENT_EVENTS, seatId.toString(),
-            PaymentCancelled(seatId = seatId, paymentId = payment.id)
+            PaymentCancelled(sagaId = sagaId, seatId = seatId, paymentId = payment.id)
         )
     }
 }

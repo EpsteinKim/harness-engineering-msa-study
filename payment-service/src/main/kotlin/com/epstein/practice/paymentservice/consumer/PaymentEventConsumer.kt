@@ -1,45 +1,37 @@
 package com.epstein.practice.paymentservice.consumer
 
 import com.epstein.practice.common.event.PaymentCancelled
+import com.epstein.practice.common.event.PaymentCreated
 import com.epstein.practice.common.event.PaymentExpired
 import com.epstein.practice.common.event.PaymentFailed
-import com.epstein.practice.common.event.PaymentRequested
 import com.epstein.practice.common.event.PaymentSucceeded
 import com.epstein.practice.paymentservice.config.KafkaConfig
-import com.epstein.practice.paymentservice.producer.PaymentProcessingService
-import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaHandler
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
 
 /**
- * `payment.events` 토픽 consumer (payment-service 측).
+ * `payment.events` 토픽 consumer (payment-service 측 self-consume).
  *
- * - PaymentRequested → 실제 결제 처리 → 결과 이벤트 재발행
- * - 나머지(Succeeded/Failed/Expired/Cancelled) → 자신이 발행자, 소비 무시
+ * 결제 처리는 payment.commands → PaymentCommandConsumer가 담당.
+ * 여기서는 자기 발행 이벤트를 소비하되 추가 액션 없음.
  */
 @Component
 @KafkaListener(topics = [KafkaConfig.TOPIC_PAYMENT_EVENTS])
-class PaymentEventConsumer(
-    private val processingService: PaymentProcessingService
-) {
-    private val logger = LoggerFactory.getLogger(PaymentEventConsumer::class.java)
+class PaymentEventConsumer {
 
     @KafkaHandler
-    fun onRequested(event: PaymentRequested) {
-        logger.info("PaymentRequested received: seat={}, user={}", event.seatId, event.userId)
-        processingService.process(event)
-    }
+    fun onCreated(event: PaymentCreated) { /* self-published */ }
 
     @KafkaHandler
-    fun onSucceeded(event: PaymentSucceeded) { /* self-published, ignore */ }
+    fun onSucceeded(event: PaymentSucceeded) { /* self-published */ }
 
     @KafkaHandler
-    fun onFailed(event: PaymentFailed) { /* self-published, ignore */ }
+    fun onFailed(event: PaymentFailed) { /* self-published */ }
 
     @KafkaHandler
-    fun onExpired(event: PaymentExpired) { /* self-published, ignore */ }
+    fun onExpired(event: PaymentExpired) { /* self-published */ }
 
     @KafkaHandler
-    fun onCancelled(event: PaymentCancelled) { /* self-published, ignore */ }
+    fun onCancelled(event: PaymentCancelled) { /* self-published */ }
 }

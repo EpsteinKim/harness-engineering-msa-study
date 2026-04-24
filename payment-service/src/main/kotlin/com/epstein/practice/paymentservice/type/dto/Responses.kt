@@ -1,7 +1,8 @@
 package com.epstein.practice.paymentservice.type.dto
 
 import com.epstein.practice.paymentservice.type.entity.Payment
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 data class PaymentResponse(
     val id: Long,
@@ -11,8 +12,8 @@ data class PaymentResponse(
     val eventId: Long,
     val amount: Long,
     val method: String?,
-    val createdAt: LocalDateTime,
-    val completedAt: LocalDateTime?
+    val createdAt: ZonedDateTime,
+    val completedAt: ZonedDateTime?
 ) {
     companion object {
         fun from(p: Payment) = PaymentResponse(

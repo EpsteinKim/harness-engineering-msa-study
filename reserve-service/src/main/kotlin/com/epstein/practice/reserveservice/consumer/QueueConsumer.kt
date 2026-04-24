@@ -1,27 +1,22 @@
 package com.epstein.practice.reserveservice.consumer
 
-import com.epstein.practice.common.event.SeatHeld
 import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.main.cache.QueueCacheRepository
 import com.epstein.practice.reserveservice.type.event.EnqueueMessage
 import com.epstein.practice.reserveservice.config.KafkaConfig
-import com.epstein.practice.reserveservice.config.ReserveConfig
 import com.epstein.practice.reserveservice.main.service.ReservationService
+import com.epstein.practice.reserveservice.main.service.SagaOrchestrator
 import com.epstein.practice.reserveservice.main.service.SeatService
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
-import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Component
 
 /**
  * `reserve.queue` 토픽 consumer.
- * 기존 `DynamicScheduler.processEvent` 단건 처리 로직을 이식.
  *
  * - 파티션 키: `eventId:userId%K` (ReservationService.enqueue에서 발행)
- * - 같은 파티션은 동일 consumer가 순차 처리 → 이벤트 내 FIFO 유지
- * - 실패·낙관적 락 충돌 시 기존 동작 그대로 (유저 드롭)
- * - 좌석 배정 성공 시 `seat.events`로 `SeatHeld` 발행 (payment-service가 Payment(PENDING) 생성)
+ * - 좌석 배정 성공 시 Saga 시작 → CreatePaymentCommand 발행
  */
 @Component
 class QueueConsumer(
@@ -29,11 +24,11 @@ class QueueConsumer(
     private val seatService: SeatService,
     private val eventCache: EventCacheRepository,
     private val queueCache: QueueCacheRepository,
-    private val outboxService: OutboxService,
+    private val sagaOrchestrator: SagaOrchestrator,
 ) {
     private val logger = LoggerFactory.getLogger(QueueConsumer::class.java)
 
-    @KafkaListener(topics = [KafkaConfig.TOPIC_QUEUE])
+    @KafkaListener(topics = [KafkaConfig.TOPIC_RESERVE_QUEUE])
     fun onMessage(message: EnqueueMessage) {
         val eventId = message.eventId
         val userId = message.userId
@@ -75,7 +70,8 @@ class QueueConsumer(
                 if (eventCache.getSeatSelectionType(eventId) == "SEAT_PICK") {
                     eventCache.markSeatReserved(eventId, result.seatId)
                 }
-                publishSeatHeld(eventId, userIdLong, result.seatId, result.section)
+                val amount = eventCache.getSeatPrice(eventId, result.seatId)
+                sagaOrchestrator.startSaga(eventId, userIdLong, result.seatId, amount)
                 logger.info("Reservation succeeded: user={}, event={}, seat={}", userId, eventId, result.seatId)
             } else {
                 if (message.seatId != null) {
@@ -93,18 +89,5 @@ class QueueConsumer(
             logger.error("Unexpected error processing user {} for event {}", userId, eventId, e)
             reserveService.removeFromWaiting(eventId, userId)
         }
-    }
-
-    private fun publishSeatHeld(eventId: Long, userId: Long, seatId: Long, section: String?) {
-        val amount = eventCache.getSeatPrice(eventId, seatId)
-        val event = SeatHeld(
-            seatId = seatId,
-            userId = userId,
-            eventId = eventId,
-            section = section ?: "",
-            amount = amount,
-            heldUntilMs = System.currentTimeMillis() + ReserveConfig.HOLD_TTL_MS
-        )
-        outboxService.save(KafkaConfig.TOPIC_SEAT_EVENTS, seatId.toString(), event)
     }
 }

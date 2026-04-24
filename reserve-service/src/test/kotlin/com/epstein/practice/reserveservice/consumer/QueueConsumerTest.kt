@@ -21,7 +21,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
-import com.epstein.practice.common.outbox.OutboxService
+import com.epstein.practice.reserveservice.main.service.SagaOrchestrator
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 
 @ExtendWith(MockitoExtension::class)
@@ -31,13 +31,13 @@ class QueueConsumerTest {
     @Mock lateinit var seatService: SeatService
     @Mock lateinit var eventCache: EventCacheRepository
     @Mock lateinit var queueCache: QueueCacheRepository
-    @Mock lateinit var outboxService: OutboxService
+    @Mock lateinit var sagaOrchestrator: SagaOrchestrator
 
     private lateinit var consumer: QueueConsumer
 
     @BeforeEach
     fun setUp() {
-        consumer = QueueConsumer(reserveService, seatService, eventCache, queueCache, outboxService)
+        consumer = QueueConsumer(reserveService, seatService, eventCache, queueCache, sagaOrchestrator)
     }
 
     private fun msg(section: String? = "A", seatId: Long? = null) =
@@ -81,7 +81,7 @@ class QueueConsumerTest {
         verify(eventCache).adjustSeatCounts(1L, -1, "A")
         verify(eventCache, never()).markSeatReserved(anyLong(), anyLong())
         verify(reserveService).removeFromWaiting(1L, "1")
-        verify(outboxService).save(eq(KafkaConfig.TOPIC_SEAT_EVENTS) ?: "", eq("100") ?: "", any<SeatHeld>() ?: SeatHeld(0, 0, 0, "", 0, 0))
+        verify(sagaOrchestrator).startSaga(anyLong(), anyLong(), anyLong(), anyLong())
     }
 
     @Test
@@ -98,7 +98,7 @@ class QueueConsumerTest {
 
         verify(eventCache).adjustSeatCounts(1L, -1, "A")
         verify(eventCache).markSeatReserved(1L, 99L)
-        verify(outboxService).save(eq(KafkaConfig.TOPIC_SEAT_EVENTS) ?: "", eq("99") ?: "", any<SeatHeld>() ?: SeatHeld(0, 0, 0, "", 0, 0))
+        verify(sagaOrchestrator).startSaga(anyLong(), anyLong(), anyLong(), anyLong())
     }
 
     @Test

@@ -9,7 +9,8 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.Table
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 @Entity
 @Table(
@@ -44,10 +45,10 @@ class Payment(
     var status: PaymentStatus = PaymentStatus.PENDING,
 
     @Column(name = "created_at", nullable = false)
-    val createdAt: LocalDateTime = LocalDateTime.now(),
+    val createdAt: ZonedDateTime = ZonedDateTime.now(ZoneId.of("Asia/Seoul")),
 
     @Column(name = "completed_at")
-    var completedAt: LocalDateTime? = null
+    var completedAt: ZonedDateTime? = null
 )
 
 enum class PaymentStatus {

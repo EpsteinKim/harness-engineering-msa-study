@@ -1,7 +1,5 @@
 package com.epstein.practice.reserveservice.main.service
 
-import com.epstein.practice.common.event.SeatReleaseReason
-import com.epstein.practice.common.event.SeatReleased
 import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.main.cache.QueueCacheRepository
@@ -27,6 +25,7 @@ class ReservationService(
     private val userClient: UserClient,
     private val paymentClient: PaymentClient,
     private val outboxService: OutboxService,
+    private val sagaOrchestrator: SagaOrchestrator,
 ) {
     fun enqueue(userId: String, eventId: Long, seatId: Long? = null, section: String? = null) {
         val userIdLong = userId.toLongOrNull()
@@ -89,7 +88,7 @@ class ReservationService(
             section = section,
             joinedAt = now
         )
-        outboxService.save(KafkaConfig.TOPIC_QUEUE, key, message)
+        outboxService.save(KafkaConfig.TOPIC_RESERVE_QUEUE, key, message)
     }
 
     fun removeFromWaiting(eventId: Long, userId: String) {
@@ -107,22 +106,13 @@ class ReservationService(
             eventCache.releaseHold(eventId, heldSeatId, userId)
         }
 
-        val releaseResult = seatService.releaseSeat(eventId, userId.toLong())
-        if (releaseResult.success) {
-            eventCache.adjustSeatCounts(eventId, 1, releaseResult.section)
-            outboxService.save(
-                KafkaConfig.TOPIC_SEAT_EVENTS,
-                releaseResult.seatId.toString(),
-                SeatReleased(
-                    seatId = releaseResult.seatId,
-                    userId = userId.toLong(),
-                    eventId = eventId,
-                    reason = SeatReleaseReason.CANCELLED
-                )
-            )
+        val saga = sagaOrchestrator.findActiveSaga(eventId, userId.toLong())
+        if (saga != null) {
+            sagaOrchestrator.onCancel(saga.id)
+            return true
         }
 
-        return removed > 0 || releaseResult.success
+        return removed > 0
     }
 
     fun getPosition(eventId: Long, userId: String): Long? {
@@ -142,8 +132,8 @@ class ReservationService(
             MyReservationItem(
                 eventId = seat.eventId,
                 eventName = ef["name"] ?: "",
-                eventTime = ef["eventTime"]?.let { runCatching { java.time.LocalDateTime.parse(it) }.getOrNull() }
-                    ?: java.time.LocalDateTime.MIN,
+                eventTime = ef["eventTime"]?.let { runCatching { java.time.ZonedDateTime.parse(it) }.getOrNull() }
+                    ?: java.time.ZonedDateTime.now(),
                 seatId = seat.id,
                 seatNumber = seat.seatNumber,
                 section = seat.section,

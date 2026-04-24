@@ -5,7 +5,8 @@ import com.epstein.practice.reserveservice.type.entity.SeatStatus
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 
 interface SeatRepository : JpaRepository<Seat, Long> {
@@ -55,7 +56,7 @@ interface SeatRepository : JpaRepository<Seat, Long> {
     """)
     fun findExpiredHolds(
         @Param("status") status: SeatStatus,
-        @Param("threshold") threshold: LocalDateTime
+        @Param("threshold") threshold: ZonedDateTime
     ): List<Seat>
 }
 

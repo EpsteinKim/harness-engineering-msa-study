@@ -10,6 +10,9 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.annotation.EnableKafka
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
+import org.springframework.kafka.listener.DefaultErrorHandler
+import org.springframework.util.backoff.FixedBackOff
 import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.ConsumerFactory
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory
@@ -58,16 +61,23 @@ class KafkaConfig {
     @Bean
     fun kafkaListenerContainerFactory(
         consumerFactory: ConsumerFactory<String, Any>,
+        kafkaTemplate: KafkaTemplate<String, Any>,
     ): ConcurrentKafkaListenerContainerFactory<String, Any> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, Any>()
         factory.setConsumerFactory(consumerFactory)
         factory.setMissingTopicsFatal(false)
+        factory.setCommonErrorHandler(
+            DefaultErrorHandler(
+                DeadLetterPublishingRecoverer(kafkaTemplate),
+                FixedBackOff(1000L, 3)
+            )
+        )
         return factory
     }
 
     @Bean
     fun reserveQueueTopic(): NewTopic =
-        TopicBuilder.name(TOPIC_QUEUE)
+        TopicBuilder.name(TOPIC_RESERVE_QUEUE)
             .partitions(DEFAULT_PARTITIONS)
             .replicas(DEFAULT_REPLICATION)
             .build()
@@ -86,10 +96,18 @@ class KafkaConfig {
             .replicas(DEFAULT_REPLICATION)
             .build()
 
+    @Bean
+    fun paymentCommandsTopic(): NewTopic =
+        TopicBuilder.name(TOPIC_PAYMENT_COMMANDS)
+            .partitions(DEFAULT_PARTITIONS)
+            .replicas(DEFAULT_REPLICATION)
+            .build()
+
     companion object {
-        const val TOPIC_QUEUE = "reserve.queue"
+        const val TOPIC_RESERVE_QUEUE = "reserve.queue"
         const val TOPIC_SEAT_EVENTS = "seat.events"
         const val TOPIC_PAYMENT_EVENTS = "payment.events"
+        const val TOPIC_PAYMENT_COMMANDS = "payment.commands"
         const val TOPIC_SYSTEM_TICKS = "system.ticks"
         const val TOPIC_EVENT_LIFECYCLE = "event.lifecycle"
         const val DEFAULT_PARTITIONS = 10

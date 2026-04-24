@@ -6,7 +6,7 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 
 @Entity
 @Table(name = "outbox")
@@ -24,6 +24,9 @@ class OutboxEvent(
     @Column(nullable = false, columnDefinition = "TEXT")
     val payload: String,
 
+    @Column(nullable = false, length = 200)
+    val eventType: String = "",
+
     @Column(nullable = false)
-    val createdAt: LocalDateTime = LocalDateTime.now(),
+    val createdAt: ZonedDateTime = ZonedDateTime.now(),
 )

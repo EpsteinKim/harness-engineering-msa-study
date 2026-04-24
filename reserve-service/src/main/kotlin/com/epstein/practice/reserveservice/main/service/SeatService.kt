@@ -13,7 +13,8 @@ import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 
 @Service
 class SeatService(
@@ -31,7 +32,7 @@ class SeatService(
 
         seat.status = SeatStatus.PAYMENT_PENDING
         seat.userId = userId
-        seat.reservedAt = LocalDateTime.now()
+        seat.reservedAt = ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
         seatRepository.save(seat)
 
         return ReservationResult(userId, eventId, seatId, true, "reservation successful", seat.section)
@@ -44,7 +45,7 @@ class SeatService(
 
         seat.status = SeatStatus.PAYMENT_PENDING
         seat.userId = userId
-        seat.reservedAt = LocalDateTime.now()
+        seat.reservedAt = ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
         seatRepository.save(seat)
 
         return ReservationResult(userId, eventId, seat.id, true, "seat ${seat.seatNumber} reserved", section)

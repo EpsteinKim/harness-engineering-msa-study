@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 
 @ExtendWith(MockitoExtension::class)
 class ReservationControllerTest {
@@ -178,12 +178,12 @@ class ReservationControllerTest {
                 listOf(
                     MyReservationItem(
                         eventId = 1L, eventName = "Concert",
-                        eventTime = LocalDateTime.of(2026, 5, 1, 19, 0),
+                        eventTime = ZonedDateTime.of(2026, 5, 1, 19, 0, 0, 0, java.time.ZoneOffset.UTC),
                         seatId = 10L, seatNumber = "A-1", section = "A",
                         seatStatus = "RESERVED",
                         priceAmount = 200000L,
                         paymentId = 100L, paymentStatus = "SUCCEEDED",
-                        reservedAt = LocalDateTime.of(2026, 4, 10, 9, 0)
+                        reservedAt = ZonedDateTime.of(2026, 4, 10, 9, 0, 0, 0, java.time.ZoneOffset.UTC)
                     )
                 )
             )

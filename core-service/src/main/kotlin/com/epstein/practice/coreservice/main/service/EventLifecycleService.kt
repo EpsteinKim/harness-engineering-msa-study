@@ -12,7 +12,7 @@ import com.epstein.practice.common.outbox.OutboxService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 import java.time.ZoneOffset
 
 @Service
@@ -25,7 +25,7 @@ class EventLifecycleService(
 
     @Transactional
     fun openEvents(): Int {
-        val now = LocalDateTime.now()
+        val now = ZonedDateTime.now()
         val events = eventRepository.findEventsToOpen(EventStatus.CLOSED, now)
 
         for (event in events) {
@@ -40,7 +40,7 @@ class EventLifecycleService(
 
     @Transactional
     fun closeEvents(): Int {
-        val now = LocalDateTime.now()
+        val now = ZonedDateTime.now()
         val events = eventRepository.findEventsToClose(EventStatus.OPEN, now)
 
         for (event in events) {
@@ -78,14 +78,14 @@ class EventLifecycleService(
 
         val closeTime = event.ticketCloseTime
         if (closeTime != null) {
-            val ttl = Duration.between(LocalDateTime.now(), closeTime)
+            val ttl = Duration.between(ZonedDateTime.now(), closeTime)
             if (!ttl.isNegative) {
                 eventCache.expireEvent(event.id, ttl)
             }
         }
 
         if (event.status == EventStatus.OPEN) {
-            val score = event.ticketOpenTime?.toEpochSecond(ZoneOffset.UTC)?.toDouble() ?: 0.0
+            val score = event.ticketOpenTime?.toEpochSecond()?.toDouble() ?: 0.0
             eventCache.addOpenEventIndex(event.id, score)
         } else {
             eventCache.removeOpenEventIndex(event.id)
