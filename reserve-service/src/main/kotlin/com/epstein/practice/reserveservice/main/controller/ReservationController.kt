@@ -8,8 +8,10 @@ import com.epstein.practice.reserveservice.type.dto.MyReservationItem
 import com.epstein.practice.reserveservice.type.dto.PaymentRequest
 import com.epstein.practice.reserveservice.type.dto.QueuePositionResponse
 import com.epstein.practice.reserveservice.type.dto.ReservationRequest
+import com.epstein.practice.reserveservice.type.dto.SagaStatusResponse
 import com.epstein.practice.reserveservice.producer.PaymentInitiator
 import com.epstein.practice.reserveservice.main.service.ReservationService
+import com.epstein.practice.reserveservice.main.service.SagaOrchestrator
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -25,7 +27,8 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/reservations")
 class ReservationController(
     private val reserveService: ReservationService,
-    private val paymentInitiator: PaymentInitiator
+    private val paymentInitiator: PaymentInitiator,
+    private val sagaOrchestrator: SagaOrchestrator,
 ) {
     @PostMapping
     fun enqueue(@RequestBody request: ReservationRequest): ApiResponse<EnqueueResponse> {
@@ -77,14 +80,31 @@ class ReservationController(
     @PostMapping("/pay")
     @ResponseStatus(HttpStatus.ACCEPTED)
     fun pay(@RequestBody request: PaymentRequest): ApiResponse<Map<String, Long>> {
-        val seatId = paymentInitiator.requestPayment(
+        val result = paymentInitiator.requestPayment(
             eventId = request.eventId,
             userId = request.userId,
             method = request.method
         )
         return ApiResponse.success(
-            data = mapOf("seatId" to seatId),
-            message = "결제 요청이 접수되었습니다. 최종 상태는 /my 또는 /queue로 확인하세요"
+            data = mapOf("seatId" to result.seatId, "sagaId" to result.sagaId),
+            message = "결제 요청이 접수되었습니다"
+        )
+    }
+
+    @GetMapping("/saga/{sagaId}")
+    fun getSagaStatus(@PathVariable sagaId: Long): ApiResponse<SagaStatusResponse> {
+        val saga = sagaOrchestrator.getSaga(sagaId)
+            ?: throw ServerException(message = "예약 정보를 찾을 수 없습니다", code = ErrorCode.QUEUE_NOT_FOUND)
+        return ApiResponse.success(
+            data = SagaStatusResponse(
+                sagaId = saga.id,
+                eventId = saga.eventId,
+                userId = saga.userId,
+                seatId = saga.seatId,
+                paymentId = saga.paymentId,
+                step = saga.step.name,
+                status = saga.status.name,
+            )
         )
     }
 

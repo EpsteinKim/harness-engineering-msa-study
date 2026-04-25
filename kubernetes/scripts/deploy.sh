@@ -42,6 +42,12 @@ kubectl wait --for=condition=ready pod -l app=gateway --timeout=120s
 echo "=== Ingress 배포 ==="
 kubectl apply -f "$K8S_DIR/ingress/"
 
+echo "=== 모니터링 배포 (Prometheus + Grafana + Redis Exporter) ==="
+kubectl apply -f "$K8S_DIR/monitoring/"
+kubectl wait --for=condition=ready pod -l app=prometheus --timeout=120s
+kubectl wait --for=condition=ready pod -l app=grafana --timeout=120s
+kubectl wait --for=condition=ready pod -l app=redis-exporter --timeout=60s
+
 echo ""
 echo "=== 배포 완료 ==="
 kubectl get pods
@@ -50,4 +56,6 @@ kubectl get svc
 echo ""
 kubectl get hpa
 echo ""
-echo "Ingress 사용: /etc/hosts에 '$(minikube ip)  harness.local' 추가"
+echo "접속: http://localhost:8080/api/v1/events"
+echo "Grafana: kubectl port-forward svc/grafana 3000:3000"
+echo "Prometheus: kubectl port-forward svc/prometheus 9090:9090"

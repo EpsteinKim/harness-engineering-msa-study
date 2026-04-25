@@ -11,6 +11,10 @@ spec:
       app: reserve-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
       labels:
         app: reserve-service
     spec:
@@ -68,10 +72,10 @@ spec:
           resources:
             requests:
               cpu: 200m
-              memory: 384Mi
+              memory: 512Mi
             limits:
               cpu: 1000m
-              memory: 768Mi
+              memory: 4Gi
 ---
 apiVersion: v1
 kind: Service

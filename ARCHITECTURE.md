@@ -21,7 +21,8 @@
 [Kafka]  ← 서비스 간 비동기 통신 (KRaft, 단일 브로커)
    ├─ reserve.queue (10 파티션)     ← 대기열 → 좌석 배정
    ├─ seat.events (10 파티션)       ← 좌석 상태 전이
-   ├─ payment.events (10 파티션)    ← 결제 상태 전이
+   ├─ payment.events (10 파티션)    ← 결제 상태 전이 (Saga 응답)
+   ├─ payment.commands (10 파티션)  ← Saga 커맨드 (Orchestrator → payment)
    ├─ event.lifecycle (1 파티션)    ← 이벤트 OPEN/CLOSE 알림
    └─ system.ticks (1 파티션)       ← 스케줄러 tick (SYNC, HOLD_EXPIRY)
 
@@ -85,7 +86,8 @@ kubernetes/
 |------|----------|----------|--------|
 | `reserve.queue` | reserve-service | reserve-service (QueueConsumer) | EnqueueMessage |
 | `seat.events` | reserve-service | reserve-service + payment-service | SeatHeld, SeatReserved, SeatReleased, HoldExpired |
-| `payment.events` | reserve-service + payment-service | reserve-service + payment-service | PaymentRequested, Succeeded, Failed, Expired, Cancelled |
+| `payment.commands` | reserve-service (Orchestrator) | payment-service | CreatePaymentCommand, ProcessPaymentCommand |
+| `payment.events` | payment-service | reserve-service (SagaResponseConsumer) | PaymentCreated, Succeeded, Failed, Expired, Cancelled |
 | `event.lifecycle` | core-service | reserve-service | EventOpenedRequest, EventClosedRequest |
 | `system.ticks` | core-service | reserve-service | EventLifecycleTick(SYNC), HoldExpiryTick |
 
@@ -249,3 +251,4 @@ harness-back/
 | 2026-04-06 | v1.0.0 | 최초 작성 |
 | 2026-04-17 | v12.0.0 | Event-Driven 전환 (Kafka + Saga), core-service 분리 (user-service 흡수 + Event 도메인 이관), 구조 전면 재작성 |
 | 2026-04-20 | v13.0.0 | Phase 3 Kubernetes 전환: 매니페스트 전체 작성, Actuator 추가, docker 프로파일 재사용 |
+| 2026-04-25 | v14.0.0 | Saga 오케스트레이션, Outbox 패턴, DLQ, 멱등성, Prometheus + Grafana, 분산 락, 커스텀 메트릭, 패키지 재구조화, ZonedDateTime 통일 |

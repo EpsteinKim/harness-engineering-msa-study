@@ -21,6 +21,8 @@ class ReservationSaga(
     @Column(nullable = false)
     val seatId: Long,
 
+    var paymentId: Long? = null,
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     var step: SagaStep,

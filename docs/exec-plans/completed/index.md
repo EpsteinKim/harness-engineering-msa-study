@@ -15,3 +15,8 @@
 | 2026-04-17 | Event 도메인 core-service 이관 | [event-domain-migration.md](event-domain-migration.md) | Event entity/lifecycle/query를 core-service로 이관, Seat FK 제거(eventId: Long), EventOpened/Closed Kafka 이벤트, SeatSyncService, CLAUDE.md 대용량 트래픽 원칙 추가 |
 | 2026-04-17 | 구조 정비 | - | Kafka 토픽/파티션 Config 클래스로 이관, Jackson 3.x JacksonJsonSerializer/Deserializer 전환, core-service 패키지 평탄화, metadata→seat_held 리팩토링, StartupWarmer 제거(event-driven 대체), 데드 코드 정리, ARCHITECTURE.md/README.md 재작성 |
 | 2026-04-20 | Phase 3: Kubernetes 전환 | [kubernetes-migration.md](kubernetes-migration.md) | Actuator 추가, K8s 매니페스트 전체 작성 (Deployment/Service/HPA/Ingress/ConfigMap/Secret), docker 프로파일 재사용, deploy/teardown 스크립트 |
+| 2026-04-25 | Saga 오케스트레이션 전환 | - | 중앙 Orchestrator + 보상 + 타임아웃, CreatePaymentCommand/ProcessPaymentCommand, SagaTimeoutScheduler(분산 락), PaymentCommandConsumer, SagaResponseConsumer |
+| 2026-04-25 | Outbox 패턴 도입 | - | OutboxEvent/Repository/Publisher/Service, 14곳 kafkaTemplate.send → outboxService.save, StringSerializer + __TypeId__ 헤더 |
+| 2026-04-25 | DLQ 구현 | - | DefaultErrorHandler + DeadLetterPublishingRecoverer, DeadLetterConsumer (reserve/payment) |
+| 2026-04-25 | 관측성 (Prometheus + Grafana) | - | micrometer-registry-prometheus, Prometheus/Grafana/Redis Exporter K8s 배포, Saga 커스텀 메트릭 |
+| 2026-04-25 | 패키지 재구조화 | - | type/main/consumer/producer 경로 분리 (3개 서비스) |

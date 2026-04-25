@@ -28,6 +28,16 @@ data class SeatMapEntry(
     val priceAmount: Long
 )
 
+data class SagaStatusResponse(
+    val sagaId: Long,
+    val eventId: Long,
+    val userId: Long,
+    val seatId: Long,
+    val paymentId: Long?,
+    val step: String,
+    val status: String,
+)
+
 data class MyReservationItem(
     val eventId: Long,
     val eventName: String,

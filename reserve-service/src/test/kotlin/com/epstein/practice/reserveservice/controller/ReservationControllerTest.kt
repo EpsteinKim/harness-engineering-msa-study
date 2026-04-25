@@ -30,12 +30,15 @@ class ReservationControllerTest {
     @Mock
     lateinit var paymentInitiator: com.epstein.practice.reserveservice.producer.PaymentInitiator
 
+    @Mock
+    lateinit var sagaOrchestrator: com.epstein.practice.reserveservice.main.service.SagaOrchestrator
+
     lateinit var mockMvc: MockMvc
 
     @BeforeEach
     fun setUp() {
         mockMvc = MockMvcBuilders
-            .standaloneSetup(ReservationController(queueService, paymentInitiator))
+            .standaloneSetup(ReservationController(queueService, paymentInitiator, sagaOrchestrator))
             .setControllerAdvice(GlobalExceptionHandler())
             .build()
     }

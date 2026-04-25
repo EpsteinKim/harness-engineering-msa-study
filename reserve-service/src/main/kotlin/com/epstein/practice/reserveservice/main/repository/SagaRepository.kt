@@ -9,7 +9,7 @@ import java.time.ZonedDateTime
 
 interface SagaRepository : JpaRepository<ReservationSaga, Long> {
 
-    fun findByEventIdAndUserIdAndStatusIn(eventId: Long, userId: Long, statuses: List<SagaStatus>): ReservationSaga?
+    fun findFirstByEventIdAndUserIdAndStatusInOrderByIdDesc(eventId: Long, userId: Long, statuses: List<SagaStatus>): ReservationSaga?
 
     @Query(
         """

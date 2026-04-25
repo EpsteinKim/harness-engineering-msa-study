@@ -5,12 +5,15 @@ import com.epstein.practice.common.event.ProcessPaymentCommand
 import com.epstein.practice.common.outbox.OutboxService
 import com.epstein.practice.reserveservice.config.KafkaConfig
 import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.main.cache.SagaCacheRepository
 import com.epstein.practice.reserveservice.main.repository.SagaRepository
 import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import com.epstein.practice.reserveservice.type.constant.SagaStatus
 import com.epstein.practice.reserveservice.type.constant.SagaStep
 import com.epstein.practice.reserveservice.type.entity.ReservationSaga
 import com.epstein.practice.reserveservice.type.entity.SeatStatus
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -22,8 +25,16 @@ class SagaOrchestrator(
     private val seatRepository: SeatRepository,
     private val eventCache: EventCacheRepository,
     private val outboxService: OutboxService,
+    private val sagaCache: SagaCacheRepository,
+    meterRegistry: MeterRegistry,
 ) {
     private val logger = LoggerFactory.getLogger(SagaOrchestrator::class.java)
+
+    private val sagaStarted = Counter.builder("saga.started").description("Saga 시작 수").register(meterRegistry)
+    private val sagaCompleted = Counter.builder("saga.completed").description("결제 성공").register(meterRegistry)
+    private val sagaFailed = Counter.builder("saga.failed").description("결제 실패").register(meterRegistry)
+    private val sagaExpired = Counter.builder("saga.expired").description("타임아웃 만료").register(meterRegistry)
+    private val sagaCancelled = Counter.builder("saga.cancelled").description("사용자 취소").register(meterRegistry)
 
     @Transactional
     fun startSaga(eventId: Long, userId: Long, seatId: Long, amount: Long): Long {
@@ -47,6 +58,8 @@ class SagaOrchestrator(
                 amount = amount,
             )
         )
+        sagaCache.markActive(eventId, userId.toString())
+        sagaStarted.increment()
         logger.info("Saga started: id={}, seat={}, user={}", saga.id, seatId, userId)
         return saga.id
     }
@@ -56,6 +69,7 @@ class SagaOrchestrator(
         val saga = sagaRepository.findById(sagaId).orElse(null) ?: return
         if (saga.status != SagaStatus.IN_PROGRESS || saga.step != SagaStep.SEAT_HELD) return
 
+        saga.paymentId = paymentId
         saga.step = SagaStep.PAYMENT_CREATED
         saga.updatedAt = ZonedDateTime.now()
         logger.info("Saga step: PAYMENT_CREATED, id={}, paymentId={}", sagaId, paymentId)
@@ -97,6 +111,8 @@ class SagaOrchestrator(
         saga.status = SagaStatus.COMPLETED
         saga.updatedAt = ZonedDateTime.now()
 
+        sagaCache.removeActive(saga.eventId, saga.userId.toString())
+        sagaCompleted.increment()
         logger.info("Saga completed: id={}, seat={} RESERVED", sagaId, saga.seatId)
     }
 
@@ -106,6 +122,7 @@ class SagaOrchestrator(
         if (saga.status != SagaStatus.IN_PROGRESS) return
 
         compensate(saga, SagaStatus.FAILED)
+        sagaFailed.increment()
         logger.info("Saga failed: id={}, reason={}", sagaId, reason)
     }
 
@@ -115,6 +132,7 @@ class SagaOrchestrator(
         if (saga.status != SagaStatus.IN_PROGRESS) return
 
         compensate(saga, SagaStatus.EXPIRED)
+        sagaExpired.increment()
         logger.info("Saga expired: id={}, seat={}", sagaId, saga.seatId)
     }
 
@@ -124,6 +142,7 @@ class SagaOrchestrator(
         if (saga.status != SagaStatus.IN_PROGRESS) return
 
         compensate(saga, SagaStatus.CANCELLED)
+        sagaCancelled.increment()
         logger.info("Saga cancelled: id={}, seat={}", sagaId, saga.seatId)
     }
 
@@ -143,11 +162,16 @@ class SagaOrchestrator(
         saga.step = SagaStep.COMPENSATED
         saga.status = endStatus
         saga.updatedAt = ZonedDateTime.now()
+        sagaCache.removeActive(saga.eventId, saga.userId.toString())
     }
 
     fun findActiveSaga(eventId: Long, userId: Long): ReservationSaga? {
-        return sagaRepository.findByEventIdAndUserIdAndStatusIn(
+        return sagaRepository.findFirstByEventIdAndUserIdAndStatusInOrderByIdDesc(
             eventId, userId, listOf(SagaStatus.IN_PROGRESS)
         )
+    }
+
+    fun getSaga(sagaId: Long): ReservationSaga? {
+        return sagaRepository.findById(sagaId).orElse(null)
     }
 }
