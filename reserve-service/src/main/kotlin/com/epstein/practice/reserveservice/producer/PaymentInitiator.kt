@@ -7,9 +7,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-/**
- * 사용자가 `/pay`를 누르면 활성 Saga를 찾아 결제 처리 커맨드를 발행한다.
- */
 @Service
 class PaymentInitiator(
     private val sagaOrchestrator: SagaOrchestrator,
@@ -17,7 +14,7 @@ class PaymentInitiator(
     private val logger = LoggerFactory.getLogger(PaymentInitiator::class.java)
 
     @Transactional
-    fun requestPayment(eventId: Long, userId: Long, method: String): Long {
+    fun requestPayment(eventId: Long, userId: Long, method: String): PayResult {
         val saga = sagaOrchestrator.findActiveSaga(eventId, userId)
             ?: throw ServerException(
                 message = "결제 대기 중인 예약이 없습니다",
@@ -26,6 +23,8 @@ class PaymentInitiator(
 
         sagaOrchestrator.requestPayment(saga.id, method)
         logger.info("Payment requested via Saga: sagaId={}, user={}, method={}", saga.id, userId, method)
-        return saga.seatId
+        return PayResult(seatId = saga.seatId, sagaId = saga.id)
     }
+
+    data class PayResult(val seatId: Long, val sagaId: Long)
 }

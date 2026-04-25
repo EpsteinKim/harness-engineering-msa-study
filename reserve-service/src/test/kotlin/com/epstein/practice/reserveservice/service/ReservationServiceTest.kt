@@ -25,6 +25,7 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
 import com.epstein.practice.common.outbox.OutboxService
+import com.epstein.practice.reserveservice.main.cache.SagaCacheRepository
 import java.time.ZonedDateTime
 
 @ExtendWith(MockitoExtension::class)
@@ -52,6 +53,8 @@ class ReservationServiceTest {
     lateinit var outboxService: OutboxService
     @Mock
     lateinit var sagaOrchestrator: SagaOrchestrator
+    @Mock
+    lateinit var sagaCache: SagaCacheRepository
 
     private lateinit var service: ReservationService
 
@@ -59,7 +62,7 @@ class ReservationServiceTest {
     fun setUp() {
         service = ReservationService(
             eventCache, queueCache, seatService, seatRepository,
-            userClient, paymentClient, outboxService, sagaOrchestrator
+            userClient, paymentClient, outboxService, sagaOrchestrator, sagaCache
         )
         lenient().`when`(userClient.exists(anyLong())).thenReturn(true)
     }
@@ -249,6 +252,7 @@ class ReservationServiceTest {
         @DisplayName("활성 Saga가 있으면 onCancel 호출 후 true 반환")
         fun cancelWithActiveSaga() {
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
+            `when`(sagaCache.isActive(1L, "1")).thenReturn(true)
             `when`(sagaOrchestrator.findActiveSaga(1L, 1L))
                 .thenReturn(com.epstein.practice.reserveservice.type.entity.ReservationSaga(
                     id = 1L, eventId = 1L, userId = 1L, seatId = 10L,
@@ -264,7 +268,7 @@ class ReservationServiceTest {
         @DisplayName("활성 Saga가 없고 큐에서만 제거되면 true 반환")
         fun cancelFromQueueOnly() {
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
-            `when`(sagaOrchestrator.findActiveSaga(1L, 1L)).thenReturn(null)
+            `when`(sagaCache.isActive(1L, "1")).thenReturn(false)
 
             assertTrue(service.cancel(1L, "1"))
             verify(sagaOrchestrator, never()).onCancel(anyLong())
@@ -274,7 +278,7 @@ class ReservationServiceTest {
         @DisplayName("큐에도 없고 Saga도 없으면 false 반환")
         fun cancelNotFound() {
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(0L)
-            `when`(sagaOrchestrator.findActiveSaga(1L, 1L)).thenReturn(null)
+            `when`(sagaCache.isActive(1L, "1")).thenReturn(false)
 
             assertFalse(service.cancel(1L, "1"))
         }
@@ -284,7 +288,7 @@ class ReservationServiceTest {
         fun cancelReleasesHoldWhenSeatIdPresent() {
             `when`(queueCache.getHeldSeatId(1L, "1")).thenReturn(10L)
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
-            `when`(sagaOrchestrator.findActiveSaga(1L, 1L)).thenReturn(null)
+            `when`(sagaCache.isActive(1L, "1")).thenReturn(false)
 
             service.cancel(1L, "1")
 
@@ -296,7 +300,7 @@ class ReservationServiceTest {
         fun cancelNoReleaseHoldWhenNoSeatId() {
             `when`(queueCache.getHeldSeatId(1L, "1")).thenReturn(null)
             `when`(queueCache.removeFromQueue(1L, "1")).thenReturn(1L)
-            `when`(sagaOrchestrator.findActiveSaga(1L, 1L)).thenReturn(null)
+            `when`(sagaCache.isActive(1L, "1")).thenReturn(false)
 
             service.cancel(1L, "1")
 

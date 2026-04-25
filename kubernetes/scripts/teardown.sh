@@ -4,6 +4,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 K8S_DIR="$SCRIPT_DIR/.."
 
+echo "=== 모니터링 제거 ==="
+kubectl delete -f "$K8S_DIR/monitoring/" --ignore-not-found
+
 echo "=== Ingress 제거 ==="
 kubectl delete -f "$K8S_DIR/ingress/" --ignore-not-found
 
