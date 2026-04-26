@@ -23,6 +23,24 @@ data:
         isDefault: true
         editable: false
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+data:
+  default.yaml: |
+    apiVersion: 1
+    providers:
+      - name: default
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: false
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -58,6 +76,10 @@ spec:
           volumeMounts:
             - name: datasource
               mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
             - name: data
               mountPath: /var/lib/grafana
           resources:
@@ -71,6 +93,12 @@ spec:
         - name: datasource
           configMap:
             name: grafana-datasource
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
         - name: data
           persistentVolumeClaim:
             claimName: grafana-data

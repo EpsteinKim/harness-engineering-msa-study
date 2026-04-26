@@ -3,20 +3,15 @@ package com.epstein.practice.reserveservice.main.service
 import com.epstein.practice.common.exception.ServerException
 import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.main.cache.QueueCacheRepository
-import com.epstein.practice.reserveservice.main.cache.SagaCacheRepository
 import com.epstein.practice.reserveservice.main.client.PaymentClient
 import com.epstein.practice.reserveservice.main.client.UserClient
-import com.epstein.practice.reserveservice.config.KafkaConfig
-import com.epstein.practice.reserveservice.config.KafkaConfig.Companion.PARTITION_BUCKETS
 import com.epstein.practice.reserveservice.config.ReserveConfig
 import com.epstein.practice.reserveservice.type.constant.ErrorCode
 import com.epstein.practice.reserveservice.type.dto.MyReservationItem
-import com.epstein.practice.reserveservice.type.event.EnqueueMessage
 import com.epstein.practice.reserveservice.main.repository.SeatRepository
-import com.epstein.practice.common.outbox.OutboxService
+import com.epstein.practice.reserveservice.type.entity.SeatStatus
 import org.springframework.stereotype.Service
 import java.time.ZonedDateTime
-import kotlin.math.absoluteValue
 
 @Service
 class ReservationService(
@@ -26,72 +21,56 @@ class ReservationService(
     private val seatRepository: SeatRepository,
     private val userClient: UserClient,
     private val paymentClient: PaymentClient,
-    private val outboxService: OutboxService,
     private val sagaOrchestrator: SagaOrchestrator,
-    private val sagaCache: SagaCacheRepository,
 ) {
     fun enqueue(userId: String, eventId: Long, seatId: Long? = null, section: String? = null) {
         val userIdLong = userId.toLongOrNull()
             ?: throw ServerException(message = "사용자를 찾을 수 없습니다", code = ErrorCode.USER_NOT_FOUND)
 
-        validateEnqueue(userIdLong, eventId, userId, seatId, section)
-        holdSeatIfNeeded(eventId, seatId, userId)
+        val selectionType = validateEnqueue(userIdLong, eventId, userId, seatId, section)
+        holdSeatIfNeeded(eventId, seatId, userId, selectionType)
 
-        val now = System.currentTimeMillis()
-        queueCache.addToQueue(eventId, userId, now.toDouble())
-        if (seatId != null) {
-            queueCache.holdSeat(eventId, userId, seatId)
+        val result = queueCache.enqueue(eventId, userId, seatId, section)
+        when (result) {
+            1L -> {
+                if (seatId != null) queueCache.holdSeat(eventId, userId, seatId)
+            }
+            0L -> throw ServerException(message = "이미 대기열에 등록되어 있습니다", code = ErrorCode.ALREADY_IN_QUEUE)
+            -1L -> throw ServerException(message = "잔여 좌석이 없습니다", code = ErrorCode.NO_REMAINING_SEATS)
+            -2L -> throw ServerException(message = "해당 구역은 매진되었습니다", code = ErrorCode.SECTION_FULL)
+            else -> throw ServerException(message = "대기열 등록에 실패했습니다", code = ErrorCode.INVALID_REQUEST)
         }
-
-        val bucket = (userIdLong % PARTITION_BUCKETS).absoluteValue
-        val key = "$eventId:$bucket"
-        outboxService.save(
-            KafkaConfig.TOPIC_RESERVE_QUEUE, key,
-            EnqueueMessage(eventId = eventId, userId = userId, seatId = seatId, section = section, joinedAt = now)
-        )
     }
 
-    private fun validateEnqueue(userIdLong: Long, eventId: Long, userId: String, seatId: Long?, section: String?) {
-        if (!userClient.exists(userIdLong)) {
-            throw ServerException(message = "사용자를 찾을 수 없습니다", code = ErrorCode.USER_NOT_FOUND)
-        }
-        if (!eventCache.exists(eventId)) {
+    private fun validateEnqueue(userIdLong: Long, eventId: Long, userId: String, seatId: Long?, section: String?): String {
+        val validation = queueCache.validateEnqueue(eventId, userId)
+        if (!validation.eventExists) {
             throw ServerException(message = "이벤트가 예약 가능한 상태가 아닙니다", code = ErrorCode.EVENT_NOT_OPEN)
         }
-        if (queueCache.isInQueue(eventId, userId)) {
+        if (validation.inQueue) {
             throw ServerException(message = "이미 대기열에 등록되어 있습니다", code = ErrorCode.ALREADY_IN_QUEUE)
         }
-        if (hasActiveSaga(eventId, userId, userIdLong)) {
-            throw ServerException(message = "이미 진행 중인 예약이 있습니다", code = ErrorCode.ALREADY_IN_QUEUE)
-        }
-        if (eventCache.getRemainingSeats(eventId) <= 0) {
-            throw ServerException(message = "잔여 좌석이 없습니다", code = ErrorCode.NO_REMAINING_SEATS)
+
+        if (seatRepository.existsByEventIdAndUserIdAndStatusIn(
+                eventId, userIdLong, listOf(SeatStatus.PAYMENT_PENDING, SeatStatus.RESERVED)
+            )
+        ) {
+            throw ServerException(message = "이미 해당 이벤트에 예약이 존재합니다", code = ErrorCode.ALREADY_RESERVED)
         }
 
-        val selectionType = eventCache.getSeatSelectionType(eventId)
-        when (selectionType) {
+        when (validation.seatSelectionType) {
             "SEAT_PICK" if seatId == null ->
                 throw ServerException(message = "SEAT_PICK 이벤트는 좌석 ID가 필요합니다", code = ErrorCode.INVALID_REQUEST)
 
             "SECTION_SELECT" if section == null ->
                 throw ServerException(message = "SECTION_SELECT 이벤트는 구역 정보가 필요합니다", code = ErrorCode.INVALID_REQUEST)
-
-            "SECTION_SELECT" if eventCache.getSectionAvailable(eventId, section!!) <= 0 ->
-                throw ServerException(message = "해당 구역은 매진되었습니다", code = ErrorCode.SECTION_FULL)
         }
+
+        return validation.seatSelectionType
     }
 
-    private fun hasActiveSaga(eventId: Long, userId: String, userIdLong: Long): Boolean {
-        return when (sagaCache.isActive(eventId, userId)) {
-            true -> true
-            false -> false
-            null -> sagaOrchestrator.findActiveSaga(eventId, userIdLong) != null // Redis 장애 → DB fallback
-        }
-    }
-
-    private fun holdSeatIfNeeded(eventId: Long, seatId: Long?, userId: String) {
+    private fun holdSeatIfNeeded(eventId: Long, seatId: Long?, userId: String, selectionType: String) {
         if (seatId == null) return
-        val selectionType = eventCache.getSeatSelectionType(eventId)
         if (selectionType != "SEAT_PICK") return
 
         val held = eventCache.tryHoldSeat(
@@ -113,21 +92,24 @@ class ReservationService(
 
     fun cancel(eventId: Long, userId: String): Boolean {
         val heldSeatId = queueCache.getHeldSeatId(eventId, userId)
+        val (_, section) = queueCache.getDispatchData(eventId, userId)
 
         val removed = queueCache.removeFromQueue(eventId, userId)
         queueCache.releaseHeldSeat(eventId, userId)
+
+        if (removed > 0) {
+            eventCache.adjustSeatCounts(eventId, 1, section)
+        }
 
         if (heldSeatId != null) {
             eventCache.releaseHold(eventId, heldSeatId, userId)
         }
 
         val userIdLong = userId.toLongOrNull() ?: return removed > 0
-        if (hasActiveSaga(eventId, userId, userIdLong)) {
-            val saga = sagaOrchestrator.findActiveSaga(eventId, userIdLong)
-            if (saga != null) {
-                sagaOrchestrator.onCancel(saga.id)
-                return true
-            }
+        val saga = sagaOrchestrator.findActiveSaga(eventId, userIdLong)
+        if (saga != null) {
+            sagaOrchestrator.onCancel(saga.id)
+            return true
         }
 
         return removed > 0
@@ -141,7 +123,7 @@ class ReservationService(
         val seats = seatRepository.findActiveByUserId(userId)
         if (seats.isEmpty()) return emptyList()
 
-        val payments = paymentClient.listByUser(userId).associateBy { it.seatId }
+        val payments = paymentClient.listByUser(userId).filter { it.status in listOf("PENDING", "SUCCEEDED") }.associateBy { it.seatId }
         val eventFieldsCache = mutableMapOf<Long, Map<String, String>>()
 
         return seats.map { seat ->

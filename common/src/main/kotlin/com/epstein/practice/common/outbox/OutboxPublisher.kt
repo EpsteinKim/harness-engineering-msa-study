@@ -8,10 +8,12 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaTemplate
-import org.springframework.kafka.support.mapping.AbstractJavaTypeMapper
+import org.springframework.kafka.support.SendResult
+import org.springframework.kafka.support.mapping.DefaultJacksonJavaTypeMapper
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
+import java.util.concurrent.CompletableFuture
 
 @Component
 class OutboxPublisher(
@@ -28,16 +30,19 @@ class OutboxPublisher(
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
                 ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
                 ProducerConfig.ACKS_CONFIG to "1",
+                ProducerConfig.LINGER_MS_CONFIG to 5,
+                ProducerConfig.BATCH_SIZE_CONFIG to 32768,
             )
         )
     )
 
-    @Scheduled(fixedDelay = 1000)
+@Scheduled(fixedDelay = 500)
     @Transactional
     fun relay() {
-        val pending = outboxRepository.findPendingForUpdate(100)
+        val pending = outboxRepository.findPendingForUpdate(5000)
         if (pending.isEmpty()) return
 
+        val futures = mutableListOf<Pair<OutboxEvent, CompletableFuture<SendResult<String, String>>>>()
         for (event in pending) {
             val record = ProducerRecord(
                 event.topic,
@@ -47,14 +52,26 @@ class OutboxPublisher(
             )
             record.headers().add(
                 RecordHeader(
-                    AbstractJavaTypeMapper.DEFAULT_CLASSID_FIELD_NAME,
+                    DefaultJacksonJavaTypeMapper.DEFAULT_CLASSID_FIELD_NAME,
                     event.eventType.toByteArray()
                 )
             )
-            kafkaTemplate.send(record)
+            futures.add(event to kafkaTemplate.send(record))
         }
-        outboxRepository.deleteAllInBatch(pending)
 
-        logger.info("Outbox relay: {} events published", pending.size)
+        val sent = mutableListOf<OutboxEvent>()
+        for ((event, future) in futures) {
+            try {
+                future.get()
+                sent.add(event)
+            } catch (e: Exception) {
+                logger.error("Outbox relay failed for topic={}, key={}: {}", event.topic, event.key, e.message)
+            }
+        }
+
+        if (sent.isNotEmpty()) {
+            outboxRepository.deleteAllInBatch(sent)
+            logger.info("Outbox relay: {} events published", sent.size)
+        }
     }
 }

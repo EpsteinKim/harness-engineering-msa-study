@@ -74,10 +74,10 @@ spec:
           resources:
             requests:
               cpu: 200m
-              memory: 384Mi
+              memory: 512Mi
             limits:
-              cpu: 500m
-              memory: 768Mi
+              cpu: 1000m
+              memory: 4Gi
 ---
 apiVersion: v1
 kind: Service

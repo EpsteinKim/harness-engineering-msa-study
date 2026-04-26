@@ -39,10 +39,10 @@ class QueueCacheRepositoryTest {
     inner class WaitingQueue {
 
         @Test
-        @DisplayName("대기열에 추가한다")
-        fun addToQueue() {
-            queueCache.addToQueue(1L, "1", 1000.0)
-            verify(zSetOps).add("reservation:waiting:1", "1", 1000.0)
+        @DisplayName("대기열에서 제거한다 (removeFromQueue)")
+        fun removeFromQueueVerify() {
+            `when`(zSetOps.remove("reservation:waiting:1", "2")).thenReturn(1L)
+            assertEquals(1L, queueCache.removeFromQueue(1L, "2"))
         }
 
         @Test

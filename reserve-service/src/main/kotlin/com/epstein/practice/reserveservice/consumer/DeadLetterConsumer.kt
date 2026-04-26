@@ -13,7 +13,6 @@ class DeadLetterConsumer {
     @KafkaListener(
         topics = [
             "reserve.queue.DLT",
-            "seat.events.DLT",
             "payment.events.DLT",
             "payment.commands.DLT",
             "system.ticks.DLT",

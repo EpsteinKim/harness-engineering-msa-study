@@ -20,3 +20,5 @@
 | 2026-04-25 | DLQ 구현 | - | DefaultErrorHandler + DeadLetterPublishingRecoverer, DeadLetterConsumer (reserve/payment) |
 | 2026-04-25 | 관측성 (Prometheus + Grafana) | - | micrometer-registry-prometheus, Prometheus/Grafana/Redis Exporter K8s 배포, Saga 커스텀 메트릭 |
 | 2026-04-25 | 패키지 재구조화 | - | type/main/consumer/producer 경로 분리 (3개 서비스) |
+| 2026-04-26 | 대기열 선차감 + 처리량 최적화 | - | enqueue.lua 원자적 선차감, validate_enqueue.lua RTT 통합, Kafka Consumer concurrency=10, HikariCP 30/Lettuce 풀, Producer 배치, Dispatch 200ms, SagaOrchestrator afterCommit 보상, SagaTimeoutScheduler 분산 락 보강 |
+| 2026-04-26 | seat.events 토픽 제거 + 버그 수정 | - | SeatEventConsumer(no-op) 양쪽 서비스에서 제거, 중복 예약 방지(ALREADY_RESERVED), syncAllRemainingSeats 섹션 total/price 동기화 누락 수정, Grafana 대시보드 프로비저닝(Docker/K8s) |

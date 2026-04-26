@@ -26,6 +26,12 @@ class SeatSyncService(
             val sectionData = seatQueryRepository.countAvailableBySection(eventId)
             for (section in sectionData) {
                 eventCache.setField(eventId, sectionAvailableField(section.section), section.availableCount.toString())
+                eventCache.setField(eventId, sectionTotalField(section.section), section.totalCount.toString())
+            }
+
+            val sectionPrices = seatRepository.findSectionPrices(eventId)
+            for (sp in sectionPrices) {
+                eventCache.setField(eventId, sectionPriceField(sp.section), sp.price.toString())
             }
 
             val seatSelectionType = eventCache.getSeatSelectionType(eventId)

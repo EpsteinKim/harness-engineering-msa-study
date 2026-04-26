@@ -18,4 +18,17 @@ class OutboxService(
             )
         )
     }
+
+    fun saveAll(events: List<Triple<String, String?, Any>>) {
+        if (events.isEmpty()) return
+        val entities = events.map { (topic, key, payload) ->
+            OutboxEvent(
+                topic = topic,
+                key = key,
+                payload = objectMapper.writeValueAsString(payload),
+                eventType = payload::class.java.name,
+            )
+        }
+        outboxRepository.saveAll(entities)
+    }
 }

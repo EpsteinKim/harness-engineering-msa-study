@@ -45,6 +45,8 @@ interface SeatRepository : JpaRepository<Seat, Long> {
     """)
     fun findActiveByUserId(@Param("userId") userId: Long): List<Seat>
 
+    fun existsByEventIdAndUserIdAndStatusIn(eventId: Long, userId: Long, status: List<SeatStatus>): Boolean
+
     @Query("SELECT s.section AS section, MIN(s.priceAmount) AS price FROM Seat s WHERE s.eventId = :eventId GROUP BY s.section")
     fun findSectionPrices(@Param("eventId") eventId: Long): List<SectionPriceProjection>
 

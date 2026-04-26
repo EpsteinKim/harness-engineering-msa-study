@@ -73,7 +73,6 @@ class KafkaConfig {
     }
 
     companion object {
-        const val TOPIC_SEAT_EVENTS = "seat.events"
         const val TOPIC_PAYMENT_EVENTS = "payment.events"
         const val TOPIC_PAYMENT_COMMANDS = "payment.commands"
         const val CONSUMER_GROUP_ID = "payment-service"

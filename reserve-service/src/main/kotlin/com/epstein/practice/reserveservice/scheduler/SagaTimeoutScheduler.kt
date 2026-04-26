@@ -1,7 +1,8 @@
-package com.epstein.practice.reserveservice.main.service
+package com.epstein.practice.reserveservice.scheduler
 
 import com.epstein.practice.reserveservice.config.ReserveConfig
 import com.epstein.practice.reserveservice.main.repository.SagaRepository
+import com.epstein.practice.reserveservice.main.service.SagaOrchestrator
 import com.epstein.practice.reserveservice.type.constant.SagaStatus
 import com.epstein.practice.reserveservice.type.constant.SagaStep
 import org.slf4j.LoggerFactory
@@ -36,7 +37,7 @@ class SagaTimeoutScheduler(
     @Scheduled(fixedDelay = 10_000)
     fun checkTimeouts() {
         val acquired = redis.opsForValue()
-            .setIfAbsent("lock:saga-timeout", podId, Duration.ofSeconds(30))
+            .setIfAbsent("lock:saga-timeout", podId, Duration.ofSeconds(120))
         if (acquired != true) return
 
         try {
@@ -50,7 +51,11 @@ class SagaTimeoutScheduler(
 
             logger.info("Found {} expired sagas", expired.size)
             for (saga in expired) {
-                sagaOrchestrator.onTimeout(saga.id)
+                try {
+                    sagaOrchestrator.onTimeout(saga.id)
+                } catch (e: Exception) {
+                    logger.warn("Saga timeout handling failed, will retry: id={}, {}", saga.id, e.message)
+                }
             }
         } finally {
             redis.execute(unlockScript, listOf("lock:saga-timeout"), podId)
