@@ -5,7 +5,7 @@ metadata:
   labels:
     app: reserve-service
 spec:
-  replicas: 2
+  replicas: 5
   selector:
     matchLabels:
       app: reserve-service
@@ -97,7 +97,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: reserve-service
-  minReplicas: 2
+  minReplicas: 5
   maxReplicas: 5
   metrics:
     - type: Resource

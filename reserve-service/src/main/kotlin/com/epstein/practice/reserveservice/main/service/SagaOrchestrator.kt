@@ -5,7 +5,6 @@ import com.epstein.practice.common.event.ProcessPaymentCommand
 import com.epstein.practice.common.outbox.OutboxService
 import com.epstein.practice.reserveservice.config.KafkaConfig
 import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
-import com.epstein.practice.reserveservice.main.cache.SagaCacheRepository
 import com.epstein.practice.reserveservice.main.repository.SagaRepository
 import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import com.epstein.practice.reserveservice.type.constant.SagaStatus
@@ -17,6 +16,8 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.ZonedDateTime
 
 @Service
@@ -25,7 +26,6 @@ class SagaOrchestrator(
     private val seatRepository: SeatRepository,
     private val eventCache: EventCacheRepository,
     private val outboxService: OutboxService,
-    private val sagaCache: SagaCacheRepository,
     meterRegistry: MeterRegistry,
 ) {
     private val logger = LoggerFactory.getLogger(SagaOrchestrator::class.java)
@@ -58,7 +58,6 @@ class SagaOrchestrator(
                 amount = amount,
             )
         )
-        sagaCache.markActive(eventId, userId.toString())
         sagaStarted.increment()
         logger.info("Saga started: id={}, seat={}, user={}", saga.id, seatId, userId)
         return saga.id
@@ -111,7 +110,6 @@ class SagaOrchestrator(
         saga.status = SagaStatus.COMPLETED
         saga.updatedAt = ZonedDateTime.now()
 
-        sagaCache.removeActive(saga.eventId, saga.userId.toString())
         sagaCompleted.increment()
         logger.info("Saga completed: id={}, seat={} RESERVED", sagaId, saga.seatId)
     }
@@ -151,18 +149,28 @@ class SagaOrchestrator(
         saga.updatedAt = ZonedDateTime.now()
 
         val seat = seatRepository.findById(saga.seatId).orElse(null)
-        if (seat != null && seat.status == SeatStatus.PAYMENT_PENDING) {
-            seat.status = SeatStatus.AVAILABLE
+        val needsRedisCompensation = seat != null && seat.status == SeatStatus.PAYMENT_PENDING
+        if (needsRedisCompensation) {
+            seat!!.status = SeatStatus.AVAILABLE
             seat.userId = null
             seat.reservedAt = null
-            eventCache.adjustSeatCounts(saga.eventId, 1, seat.section)
-            eventCache.markSeatAvailable(saga.eventId, seat.id)
         }
 
         saga.step = SagaStep.COMPENSATED
         saga.status = endStatus
         saga.updatedAt = ZonedDateTime.now()
-        sagaCache.removeActive(saga.eventId, saga.userId.toString())
+
+        if (needsRedisCompensation) {
+            val eventId = saga.eventId
+            val seatId = seat!!.id
+            val section = seat.section
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCommit() {
+                    eventCache.adjustSeatCounts(eventId, 1, section)
+                    eventCache.markSeatAvailable(eventId, seatId)
+                }
+            })
+        }
     }
 
     fun findActiveSaga(eventId: Long, userId: Long): ReservationSaga? {

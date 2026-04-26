@@ -35,6 +35,8 @@ class KafkaConfig {
             ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
             ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to JacksonJsonSerializer::class.java,
             ProducerConfig.ACKS_CONFIG to "1",
+            ProducerConfig.LINGER_MS_CONFIG to 5,
+            ProducerConfig.BATCH_SIZE_CONFIG to 65536,
         )
         return DefaultKafkaProducerFactory(props)
     }
@@ -54,6 +56,9 @@ class KafkaConfig {
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,
             ConsumerConfig.GROUP_ID_CONFIG to CONSUMER_GROUP_ID,
             ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
+            ConsumerConfig.FETCH_MIN_BYTES_CONFIG to 1024,
+            ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG to 100,
+            ConsumerConfig.MAX_POLL_RECORDS_CONFIG to 500,
         )
         return DefaultKafkaConsumerFactory(props, StringDeserializer(), deserializer)
     }
@@ -65,6 +70,7 @@ class KafkaConfig {
     ): ConcurrentKafkaListenerContainerFactory<String, Any> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, Any>()
         factory.setConsumerFactory(consumerFactory)
+        factory.setConcurrency(DEFAULT_PARTITIONS)
         factory.setMissingTopicsFatal(false)
         factory.setCommonErrorHandler(
             DefaultErrorHandler(
@@ -78,13 +84,6 @@ class KafkaConfig {
     @Bean
     fun reserveQueueTopic(): NewTopic =
         TopicBuilder.name(TOPIC_RESERVE_QUEUE)
-            .partitions(DEFAULT_PARTITIONS)
-            .replicas(DEFAULT_REPLICATION)
-            .build()
-
-    @Bean
-    fun seatEventsTopic(): NewTopic =
-        TopicBuilder.name(TOPIC_SEAT_EVENTS)
             .partitions(DEFAULT_PARTITIONS)
             .replicas(DEFAULT_REPLICATION)
             .build()
@@ -105,7 +104,6 @@ class KafkaConfig {
 
     companion object {
         const val TOPIC_RESERVE_QUEUE = "reserve.queue"
-        const val TOPIC_SEAT_EVENTS = "seat.events"
         const val TOPIC_PAYMENT_EVENTS = "payment.events"
         const val TOPIC_PAYMENT_COMMANDS = "payment.commands"
         const val TOPIC_SYSTEM_TICKS = "system.ticks"

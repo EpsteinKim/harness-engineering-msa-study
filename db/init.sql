@@ -1,0 +1,3 @@
+CREATE DATABASE reserve_db;
+CREATE DATABASE core_db;
+CREATE DATABASE payment_db;
