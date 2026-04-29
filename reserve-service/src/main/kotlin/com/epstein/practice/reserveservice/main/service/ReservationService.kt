@@ -9,7 +9,6 @@ import com.epstein.practice.reserveservice.config.ReserveConfig
 import com.epstein.practice.reserveservice.type.constant.ErrorCode
 import com.epstein.practice.reserveservice.type.dto.MyReservationItem
 import com.epstein.practice.reserveservice.main.repository.SeatRepository
-import com.epstein.practice.reserveservice.type.entity.SeatStatus
 import org.springframework.stereotype.Service
 import java.time.ZonedDateTime
 
@@ -51,10 +50,7 @@ class ReservationService(
             throw ServerException(message = "이미 대기열에 등록되어 있습니다", code = ErrorCode.ALREADY_IN_QUEUE)
         }
 
-        if (seatRepository.existsByEventIdAndUserIdAndStatusIn(
-                eventId, userIdLong, listOf(SeatStatus.PAYMENT_PENDING, SeatStatus.RESERVED)
-            )
-        ) {
+        if (validation.alreadyReserved) {
             throw ServerException(message = "이미 해당 이벤트에 예약이 존재합니다", code = ErrorCode.ALREADY_RESERVED)
         }
 

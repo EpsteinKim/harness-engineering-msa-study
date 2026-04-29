@@ -58,9 +58,6 @@ class ReservationServiceTest {
             userClient, paymentClient, sagaOrchestrator
         )
         lenient().`when`(userClient.exists(anyLong())).thenReturn(true)
-        lenient().`when`(seatRepository.existsByEventIdAndUserIdAndStatusIn(
-            anyLong(), anyLong(), anyList()
-        )).thenReturn(false)
     }
 
     @Nested
@@ -208,10 +205,7 @@ class ReservationServiceTest {
         @DisplayName("이미 해당 이벤트에 예약이 존재하면 ALREADY_RESERVED 예외")
         fun enqueueAlreadyReserved() {
             `when`(queueCache.validateEnqueue(1L, "1"))
-                .thenReturn(EnqueueValidation(true, false, "SEAT_PICK"))
-            `when`(seatRepository.existsByEventIdAndUserIdAndStatusIn(
-                eq(1L), eq(1L), anyList()
-            )).thenReturn(true)
+                .thenReturn(EnqueueValidation(true, false, "SEAT_PICK", alreadyReserved = true))
 
             val exception = assertThrows(ServerException::class.java) {
                 service.enqueue("1", 1L, seatId = 10L)

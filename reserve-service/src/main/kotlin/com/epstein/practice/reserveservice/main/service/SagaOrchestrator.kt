@@ -5,6 +5,7 @@ import com.epstein.practice.common.event.ProcessPaymentCommand
 import com.epstein.practice.common.outbox.OutboxService
 import com.epstein.practice.reserveservice.config.KafkaConfig
 import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
+import com.epstein.practice.reserveservice.main.cache.QueueCacheRepository
 import com.epstein.practice.reserveservice.main.repository.SagaRepository
 import com.epstein.practice.reserveservice.main.repository.SeatRepository
 import com.epstein.practice.reserveservice.type.constant.SagaStatus
@@ -25,6 +26,7 @@ class SagaOrchestrator(
     private val sagaRepository: SagaRepository,
     private val seatRepository: SeatRepository,
     private val eventCache: EventCacheRepository,
+    private val queueCache: QueueCacheRepository,
     private val outboxService: OutboxService,
     meterRegistry: MeterRegistry,
 ) {
@@ -160,14 +162,22 @@ class SagaOrchestrator(
         saga.status = endStatus
         saga.updatedAt = ZonedDateTime.now()
 
+        val eventId = saga.eventId
+        val userId = saga.userId.toString()
         if (needsRedisCompensation) {
-            val eventId = saga.eventId
             val seatId = seat!!.id
             val section = seat.section
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
                 override fun afterCommit() {
                     eventCache.adjustSeatCounts(eventId, 1, section)
                     eventCache.markSeatAvailable(eventId, seatId)
+                    queueCache.unmarkReserved(eventId, userId)
+                }
+            })
+        } else {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCommit() {
+                    queueCache.unmarkReserved(eventId, userId)
                 }
             })
         }

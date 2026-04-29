@@ -6,6 +6,14 @@ spring:
     name: gateway
   cloud:
     gateway:
+      httpclient:
+        connect-timeout: 3000
+        response-timeout: 15s
+        pool:
+          type: fixed
+          max-connections: 2000
+          acquire-timeout: 3000
+          max-idle-time: 10s
       server:
         webflux:
           routes:
@@ -28,7 +36,7 @@ spring:
                   args:
                     retries: 3
                     statuses: SERVICE_UNAVAILABLE,BAD_GATEWAY,GATEWAY_TIMEOUT
-                    methods: GET,POST
+                    methods: GET
                     backoff:
                       firstBackoff: 50ms
                       maxBackoff: 500ms
@@ -43,7 +51,7 @@ spring:
                   args:
                     retries: 3
                     statuses: SERVICE_UNAVAILABLE,BAD_GATEWAY,GATEWAY_TIMEOUT
-                    methods: GET,POST
+                    methods: GET
                     backoff:
                       firstBackoff: 50ms
                       maxBackoff: 500ms
@@ -89,6 +97,14 @@ spring:
       on-profile: docker
   cloud:
     gateway:
+      httpclient:
+        connect-timeout: 3000
+        response-timeout: 15s
+        pool:
+          type: fixed
+          max-connections: 2000
+          acquire-timeout: 3000
+          max-idle-time: 10s
       server:
         webflux:
           routes:
@@ -111,7 +127,7 @@ spring:
                   args:
                     retries: 3
                     statuses: SERVICE_UNAVAILABLE,BAD_GATEWAY,GATEWAY_TIMEOUT
-                    methods: GET,POST
+                    methods: GET
                     backoff:
                       firstBackoff: 50ms
                       maxBackoff: 500ms
@@ -126,7 +142,7 @@ spring:
                   args:
                     retries: 3
                     statuses: SERVICE_UNAVAILABLE,BAD_GATEWAY,GATEWAY_TIMEOUT
-                    methods: GET,POST
+                    methods: GET
                     backoff:
                       firstBackoff: 50ms
                       maxBackoff: 500ms
