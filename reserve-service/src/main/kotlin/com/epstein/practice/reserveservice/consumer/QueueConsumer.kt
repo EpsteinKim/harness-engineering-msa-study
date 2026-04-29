@@ -62,6 +62,7 @@ class QueueConsumer(
                     eventCache.markSeatReserved(eventId, result.seatId)
                 }
                 queueCache.releaseHeldSeat(eventId, userId)
+                queueCache.markReserved(eventId, userId)
                 val amount = eventCache.getSeatPrice(eventId, result.seatId)
                 sagaOrchestrator.startSaga(eventId, userIdLong, result.seatId, amount)
                 logger.info("Reservation succeeded: user={}, event={}, seat={}", userId, eventId, result.seatId)

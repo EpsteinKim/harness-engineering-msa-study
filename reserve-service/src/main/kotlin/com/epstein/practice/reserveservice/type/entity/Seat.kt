@@ -5,7 +5,13 @@ import java.time.ZonedDateTime
 import java.time.ZoneId
 
 @Entity
-@Table(name = "seat")
+@Table(
+    name = "seat",
+    indexes = [
+        Index(name = "idx_seat_event_user_status", columnList = "event_id, user_id, status"),
+        Index(name = "idx_seat_event_section_status", columnList = "event_id, section, status"),
+    ]
+)
 class Seat(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -1,6 +1,7 @@
 package com.epstein.practice.reserveservice.main.cache
 
 import com.epstein.practice.common.cache.eventCacheKey
+import com.epstein.practice.common.cache.reservedUsersKey
 import com.epstein.practice.reserveservice.type.constant.waitingKey
 import org.springframework.core.io.ClassPathResource
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -82,18 +83,20 @@ class QueueCacheRepository(
         val eventExists: Boolean,
         val inQueue: Boolean,
         val seatSelectionType: String,
+        val alreadyReserved: Boolean = false,
     )
 
     fun validateEnqueue(eventId: Long, userId: String): EnqueueValidation {
         val raw = redis.execute(
             validateEnqueueScript,
-            listOf(eventCacheKey(eventId), waitingKey(eventId)),
+            listOf(eventCacheKey(eventId), waitingKey(eventId), reservedUsersKey(eventId)),
             userId
         ) as? List<*> ?: return EnqueueValidation(false, false, "")
         return EnqueueValidation(
             eventExists = raw.getOrNull(0)?.toString()?.toLongOrNull() == 1L,
             inQueue = raw.getOrNull(1)?.toString()?.toLongOrNull() == 1L,
             seatSelectionType = raw.getOrNull(2)?.toString() ?: "SECTION_SELECT",
+            alreadyReserved = raw.getOrNull(3)?.toString()?.toLongOrNull() == 1L,
         )
     }
 
@@ -155,6 +158,16 @@ class QueueCacheRepository(
     fun recoverToQueue(eventId: Long, entry: DispatchEntry) {
         enqueue(eventId, entry.userId, entry.seatId, entry.section)
         hashOps.delete(processingKey(eventId), entry.userId)
+    }
+
+    // === Reserved Users (중복 예약 방지, DB 대신 Redis 체크) ===
+
+    fun markReserved(eventId: Long, userId: String) {
+        redis.opsForSet().add(reservedUsersKey(eventId), userId)
+    }
+
+    fun unmarkReserved(eventId: Long, userId: String) {
+        redis.opsForSet().remove(reservedUsersKey(eventId), userId)
     }
 
     private fun seatHeldKey(eventId: Long) = "seat_held:$eventId"
