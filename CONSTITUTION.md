@@ -15,7 +15,7 @@
 | 주요 기능 | 대기열(Queue) 시스템 |
 | 언어/프레임워크 | Kotlin 2.2.21 / Spring Boot 4.0.5 / Spring MVC + Cloud Gateway |
 | 런타임 | Java 21 |
-| 컨테이너 | Docker (향후 K8s 전환 예정) |
+| 컨테이너 | Docker Compose (Phase 2) + Kubernetes (Phase 3 병행) |
 | 환경 | dev / staging / prod |
 
 ---
@@ -26,7 +26,11 @@
 - **느슨한 결합**: 서비스 간 직접 의존을 최소화하고, 인터페이스를 통해 통신한다.
 - **높은 응집도**: 관련 로직은 같은 서비스 내에 위치한다.
 - **실패 격리**: 한 서비스의 장애가 전체 시스템에 전파되지 않아야 한다.
-- **Database per Service**: 각 서비스는 자체 데이터베이스를 소유하며, 서비스 간 직접 DB 접근은 금지한다.
+- **Database per Service**: 각 서비스는 자체 데이터베이스를 소유하며, 서비스 간 직접 DB 접근은 금지한다. 서비스 간 참조는 ID로만 (FK 금지).
+- **Redis-first**: 핫패스 데이터는 Redis를 1차 저장소로 사용하고, DB는 영속 백업 역할로 둔다.
+- **대용량 트래픽 기준 설계**: 모든 설계/분석은 대용량 트래픽 관점을 기준으로 한다.
+  - 핫패스(높은 동시성) → 수평 확장 가능한 서비스에 배치
+  - 콜드패스(낮은 빈도) → 싱글톤 서비스에 배치
 
 ---
 
@@ -76,21 +80,35 @@ chore(ci): 파이프라인 스크립트 수정
 
 - RESTful 설계 원칙을 따른다.
 - API 버전은 URI에 명시한다. (예: `/api/v1/...`)
+- 리소스명 복수형, kebab-case
 - 응답 형식 표준:
 
 ```json
 {
   "status": "success | error",
   "data": {},
-  "message": ""
+  "message": "",
+  "code": ""
 }
 ```
 
 ### 4.3 Kotlin 컨벤션
 
 - [Kotlin 공식 코딩 컨벤션](https://kotlinlang.org/docs/coding-conventions.html)을 따른다.
-- Coroutine 사용 시 structured concurrency 원칙을 준수한다.
 - Nullable 타입은 최소화하고, 불가피한 경우 early return 패턴을 사용한다.
+- Compiler flags: `-Xjsr305=strict` (null-safety 엄격 모드 적용됨).
+
+### 4.4 메시지/로깅 컨벤션
+
+- **사용자 노출 메시지는 한글**로 작성한다.
+- **로그 메시지는 영문** 유지 (관측/검색 편의).
+- **예외 코드는 영문 대문자 스네이크 케이스** (예: `ALREADY_RESERVED`, `NO_REMAINING_SEATS`).
+
+### 4.5 설정 관리 컨벤션
+
+- 설정은 가능한 한 **코드에서 명시적으로 정의**한다.
+- `application.properties`는 환경별로 달라지는 값(호스트, 포트, 크레덴셜 등)만 둔다.
+- 어노테이션에 직접 작성할 수 있으면 별도 상수로 추출하지 않는다.
 
 ---
 
@@ -126,3 +144,4 @@ chore(ci): 파이프라인 스크립트 수정
 | 날짜 | 버전 | 변경 내용 | 작성자 |
 |------|------|-----------|--------|
 | 2026-04-06 | v1.0.0 | 최초 작성 (원칙/구조 분리) | - |
+| 2026-04-29 | v1.1.0 | CLAUDE.md에서 프로젝트 원칙 이관 (redis-first, 트래픽 설계, 메시지/설정 컨벤션), API 응답 code 필드 추가, Coroutine 제거, Phase 현행화 | - |
