@@ -5,6 +5,7 @@ import com.epstein.practice.reserveservice.config.KafkaConfig.Companion.PARTITIO
 import com.epstein.practice.reserveservice.main.cache.EventCacheRepository
 import com.epstein.practice.reserveservice.main.cache.QueueCacheRepository
 import com.epstein.practice.reserveservice.type.event.EnqueueMessage
+import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
@@ -36,17 +37,28 @@ class QueueDispatchScheduler(
         Long::class.java
     )
 
+    @PostConstruct
+    fun init() {
+        logger.info("QueueDispatchScheduler ready: podId={}, podHash={}", podId, podId.hashCode())
+    }
+
     @Scheduled(fixedDelay = 200)
     fun dispatch() {
-        val acquired = redis.opsForValue()
-            .setIfAbsent("lock:queue-dispatch", podId, Duration.ofSeconds(2))
-        if (acquired != true) return
+        val openEventIds = eventCache.getOpenEventIdsOrderedByTicketOpenTime()
+        if (openEventIds.isEmpty()) return
 
-        try {
-            val openEventIds = eventCache.getOpenEventIdsOrderedByTicketOpenTime()
+        // 파드별 시작 오프셋: 같은 순서 리스트를 podId 해시로 회전시켜 head-of-line 분산
+        val offset = (podId.hashCode() % openEventIds.size).absoluteValue
+        val ordered = openEventIds.drop(offset) + openEventIds.take(offset)
 
-            for (eventId in openEventIds) {
-                val entries = queueCache.popForDispatch(eventId, 100000)
+        for (eventId in ordered) {
+            val lockKey = "lock:queue-dispatch:$eventId"
+            val acquired = redis.opsForValue()
+                .setIfAbsent(lockKey, podId, Duration.ofSeconds(2))
+            if (acquired != true) continue
+
+            try {
+                val entries = queueCache.popForDispatch(eventId, 1000)
                 if (entries.isEmpty()) continue
 
                 val futures = entries.mapNotNull { entry ->
@@ -75,9 +87,9 @@ class QueueDispatchScheduler(
                 }
 
                 logger.info("Queue dispatch: eventId={}, sent={}/{}", eventId, sent, entries.size)
+            } finally {
+                redis.execute(unlockScript, listOf(lockKey), podId)
             }
-        } finally {
-            redis.execute(unlockScript, listOf("lock:queue-dispatch"), podId)
         }
     }
 }

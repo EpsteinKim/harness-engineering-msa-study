@@ -1,5 +1,6 @@
 package com.epstein.practice.reserveservice.config
 
+import org.apache.kafka.clients.admin.AdminClientConfig
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
@@ -17,6 +18,7 @@ import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.ConsumerFactory
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory
 import org.springframework.kafka.core.DefaultKafkaProducerFactory
+import org.springframework.kafka.core.KafkaAdmin
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.core.ProducerFactory
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer
@@ -25,6 +27,16 @@ import org.springframework.kafka.support.serializer.JacksonJsonSerializer
 @Configuration
 @EnableKafka
 class KafkaConfig {
+
+    @Bean
+    fun kafkaAdmin(
+        @Value("\${spring.kafka.bootstrap-servers}") bootstrapServers: String,
+    ): KafkaAdmin = KafkaAdmin(mapOf(
+        AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,
+    )).apply {
+        setFatalIfBrokerNotAvailable(true)
+        setModifyTopicConfigs(true)
+    }
 
     @Bean
     fun producerFactory(

@@ -22,3 +22,5 @@
 | 2026-04-25 | 패키지 재구조화 | - | type/main/consumer/producer 경로 분리 (3개 서비스) |
 | 2026-04-26 | 대기열 선차감 + 처리량 최적화 | - | enqueue.lua 원자적 선차감, validate_enqueue.lua RTT 통합, Kafka Consumer concurrency=10, HikariCP 30/Lettuce 풀, Producer 배치, Dispatch 200ms, SagaOrchestrator afterCommit 보상, SagaTimeoutScheduler 분산 락 보강 |
 | 2026-04-26 | seat.events 토픽 제거 + 버그 수정 | - | SeatEventConsumer(no-op) 양쪽 서비스에서 제거, 중복 예약 방지(ALREADY_RESERVED), syncAllRemainingSeats 섹션 total/price 동기화 누락 수정, Grafana 대시보드 프로비저닝(Docker/K8s) |
+| 2026-04-30 | NeonDB → 로컬 PostgreSQL 전환 | [local-db-migration.md](local-db-migration.md) | NeonDB(싱가포르) ~23ms 레이턴시 제거, 로컬 PostgreSQL 컨테이너 1개 + DB 3개(reserve/core/payment), 부하 테스트용 |
+| 2026-04-30 | Dispatch 분산 + payment 컨슈머 정상화 + Kafka 토폴로지 강건화 | [dispatch-distribution.md](dispatch-distribution.md) | per-event 락(`lock:queue-dispatch:{eventId}`) + podId 오프셋 회전 + popForDispatch 1000 상한 / payment consumer concurrency 1→10 + HikariCP 명시 + producer 정렬 / **Kafka 토픽 파티션 미스매치 진단·교정 (NewTopic 1→10 race) + 3개 서비스 KafkaAdmin 명시 bean (`setFatalIfBrokerNotAvailable=true`) + initContainer wait-kafka + KAFKA_NUM_PARTITIONS workaround 제거** / gateway replicas 1→3 (HPA 미동작 보완) |
