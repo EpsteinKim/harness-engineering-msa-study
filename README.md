@@ -143,10 +143,7 @@ locust -f enqueue_burst.py --host http://localhost:8080
 ├── payment-service/    결제 처리
 ├── kubernetes/         K8s 매니페스트
 └── docs/
-    ├── learn/
-    ├── exec-plans/
-    ├── design-docs/
-    └── service-specs/
+    └── learn/         Kafka·Outbox·Saga·DLQ·멱등성 학습 노트
 ```
 
 ## 라이선스
