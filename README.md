@@ -79,7 +79,7 @@ Redis Lua 스크립트(`try_hold_seat.lua`)로 옮기고, HOLD는 TTL로 자동 
 
 ### 3. NeonDB → 로컬 PostgreSQL — 60ms → 0.1ms
 
-부하 테스트 신뢰성이 안 나와서 latency 분포를 봤더니 DB 왕복이 ~23ms였습니다. NeonDB가 싱가포르 리전이라 한국에서 RTT가 그대로 깔리고 있었습니다. 단일 PostgreSQL 컨테이너 안에 reserve_db / core_db / payment_db로 데이터베이스만 분리해서(DB per Service 원칙은 유지) 로컬로 옮겼습니다. 230배 단축됐습니다. 작은 변경이지만 이후 모든 튜닝 의사결정의 측정 토대가 됐습니다.
+부하 테스트 신뢰성이 안 나와서 latency 분포를 봤더니 DB 왕복이 ~60ms였습니다. NeonDB가 싱가포르 리전이라 한국에서 RTT가 그대로 깔리고 있었습니다. 단일 PostgreSQL 컨테이너 안에 reserve_db / core_db / payment_db로 데이터베이스만 분리해서(DB per Service 원칙은 유지) 로컬로 옮겼습니다. 약 600배 단축됐습니다. 작은 변경이지만 이후 모든 튜닝 의사결정의 측정 토대가 됐습니다.
 
 ## 측정 결과
 
@@ -87,7 +87,7 @@ Redis Lua 스크립트(`try_hold_seat.lua`)로 옮기고, HOLD는 TTL로 자동 
 |---|---|---|
 | enqueue 천장 RPS | ~3,032 | gateway 3 / reserve 5 replicas, 부하기 동일 박스 |
 | 좌석 데이터 규모 | 50,000 석 | SECTION + SEAT 혼합 시나리오 |
-| DB 왕복 latency | ~0.1ms (NeonDB 시절 ~23ms) | 로컬 PostgreSQL 컨테이너 |
+| DB 왕복 latency | ~0.1ms (NeonDB 시절 ~60ms) | 로컬 PostgreSQL 컨테이너 |
 | Saga 단계 | 좌석 배정 → Payment(PENDING) 생성 → Process → 좌석 RESERVED 확정 / 보상 | |
 
 측정 환경은 단일 맥북 + OrbStack + 부하 발생기 동거입니다. 외부 부하기로 옮기기 전엔 박스 CPU 한도가 곧 측정 천장이라는 점을 감안하시기 바랍니다.
