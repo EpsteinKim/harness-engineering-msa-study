@@ -77,7 +77,7 @@ gateway쪽에서 http커넥션풀이 가득차 503에러 및 800tps밖에 수용
 
 Redis Lua 스크립트(`try_hold_seat.lua`)로 옮기고, HOLD는 TTL로 자동 만료시켰습니다. 별도 sweeper는 두지 않았습니다. 만료된 HOLD는 다음 시도에서 자연스럽게 재검증되니까 굳이 청소 잡을 띄울 필요가 없다고 판단했습니다. SECTION_SELECT 쪽은 결이 다른 문제라 SKIP LOCKED로 따로 풀었습니다 — 어떤 좌석이든 비어 있으면 되는 시나리오라 그쪽이 자연스럽습니다.
 
-### 3. NeonDB → 로컬 PostgreSQL — 23ms → 0.1ms
+### 3. NeonDB → 로컬 PostgreSQL — 60ms → 0.1ms
 
 부하 테스트 신뢰성이 안 나와서 latency 분포를 봤더니 DB 왕복이 ~23ms였습니다. NeonDB가 싱가포르 리전이라 한국에서 RTT가 그대로 깔리고 있었습니다. 단일 PostgreSQL 컨테이너 안에 reserve_db / core_db / payment_db로 데이터베이스만 분리해서(DB per Service 원칙은 유지) 로컬로 옮겼습니다. 230배 단축됐습니다. 작은 변경이지만 이후 모든 튜닝 의사결정의 측정 토대가 됐습니다.
 
