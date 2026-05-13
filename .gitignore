@@ -49,11 +49,5 @@ out/
 ### Kubernetes Secrets ###
 kubernetes/config/db-secret.yaml
 
-### 하네스 엔지니어링 산출물 (docs/learn 제외) ###
-/AGENTS.md
-/ARCHITECTURE.md
-/CLAUDE.md
-/CONSTITUTION.md
-/docs/*
-!/docs/learn/
-!/docs/learn/**
+### macOS noise ###
+.DS_Store
